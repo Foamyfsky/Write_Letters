@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Letters in Motion</title>
+    <link rel="stylesheet" href="src/styles.css" />
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <script defer src="src/app.js"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar" aria-label="Main navigation">
+        <button class="brand-button" type="button" data-action="compose">
+          <span class="brand-mark" aria-hidden="true">L</span>
+          <span>
+            <span class="brand-title">Letters in Motion</span>
+            <span class="brand-subtitle">encrypted generative letters</span>
+          </span>
+        </button>
+        <nav class="view-tabs" aria-label="Application sections">
+          <button class="tab-button is-active" type="button" data-action="compose">Write</button>
+          <button class="tab-button" type="button" data-action="gallery">Gallery</button>
+        </nav>
+        <span class="privacy-pill" id="privacyPill">Local encrypted vault</span>
+      </header>
+
+      <main>
+        <section class="view is-active" id="composeView" aria-labelledby="composeTitle">
+          <div class="compose-layout">
+            <form class="letter-form" id="letterForm" autocomplete="off">
+              <div class="section-kicker">Phase 1</div>
+              <h1 id="composeTitle">Write the letter</h1>
+
+              <div class="field-grid">
+                <label class="field">
+                  <span>Recipient</span>
+                  <input id="recipientInput" name="recipient" maxlength="42" required placeholder="Someone you love" />
+                </label>
+                <label class="field">
+                  <span>Title</span>
+                  <input id="titleInput" name="title" maxlength="56" required placeholder="A little universe" />
+                </label>
+              </div>
+
+              <label class="field">
+                <span>Access key</span>
+                <input
+                  id="accessKeyInput"
+                  name="accessKey"
+                  type="password"
+                  minlength="3"
+                  required
+                  placeholder="A private word or name"
+                />
+              </label>
+
+              <label class="field">
+                <span>Key prompt</span>
+                <input
+                  id="keyPromptInput"
+                  name="keyPrompt"
+                  maxlength="80"
+                  placeholder="Question shown before opening"
+                />
+              </label>
+
+              <label class="field message-field">
+                <span>Message</span>
+                <textarea
+                  id="messageInput"
+                  name="message"
+                  maxlength="1800"
+                  required
+                  placeholder="Begin with the words only they should receive..."
+                ></textarea>
+              </label>
+
+              <div class="form-actions">
+                <button class="primary-button" type="submit">Seal letter</button>
+                <button class="quiet-button" type="button" id="clearDraftButton">Clear draft</button>
+              </div>
+              <p class="status-line" id="composeStatus" role="status"></p>
+            </form>
+
+            <aside class="typewriter-stage" aria-label="Live typewriter preview">
+              <div class="paper-frame">
+                <div class="floating-letters" id="floatingLetters" aria-hidden="true"></div>
+                <div class="letter-preview" id="letterPreview">
+                  <p class="preview-recipient" id="previewRecipient">To someone beloved</p>
+                  <p class="preview-title" id="previewTitle">A little universe</p>
+                  <p class="preview-message" id="previewMessage">Your words will gather here as soft ink.</p>
+                </div>
+              </div>
+              <div class="keyboard" id="keyboard" aria-label="Virtual keyboard"></div>
+            </aside>
+          </div>
+        </section>
+
+        <section class="view" id="galleryView" aria-labelledby="galleryTitle">
+          <div class="gallery-layout">
+            <div class="gallery-main">
+              <div class="gallery-toolbar">
+                <div>
+                  <div class="section-kicker">Phase 2</div>
+                  <h1 id="galleryTitle">Wind chime gallery</h1>
+                </div>
+                <div class="toolbar-actions">
+                  <button class="quiet-button" type="button" data-action="compose">New letter</button>
+                  <button class="quiet-button" type="button" id="copyLinkButton" disabled>Copy secure link</button>
+                </div>
+              </div>
+              <div class="canvas-frame" id="galleryCanvasFrame">
+                <div id="galleryCanvas" class="canvas-host" aria-label="Interactive physics gallery"></div>
+                <div class="empty-state" id="emptyGallery">
+                  <h2>No sealed letters yet</h2>
+                  <p>Write and seal a letter to hang it here.</p>
+                  <button class="primary-button" type="button" data-action="compose">Write one</button>
+                </div>
+              </div>
+            </div>
+
+            <aside class="gallery-panel" aria-label="Letter vault">
+              <div class="panel-header">
+                <div>
+                  <div class="section-kicker">Vault</div>
+                  <h2 id="vaultTitle">Your letters</h2>
+                </div>
+                <button class="danger-button" type="button" id="clearVaultButton">Clear vault</button>
+              </div>
+              <div class="letter-list" id="letterList"></div>
+              <div class="selected-letter" id="selectedLetter">
+                <p class="muted">Select an envelope to unlock, share, or present it.</p>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <section class="view" id="riverView" aria-labelledby="riverTitle">
+          <div class="river-toolbar">
+            <button class="quiet-button" type="button" id="backToGalleryButton">Gallery</button>
+            <div>
+              <div class="section-kicker">Phase 3</div>
+              <h1 id="riverTitle">River of Stars</h1>
+            </div>
+            <button class="quiet-button" type="button" id="replayRiverButton">Replay</button>
+          </div>
+          <div class="river-layout">
+            <div class="river-canvas-wrap">
+              <div id="riverCanvas" class="canvas-host" aria-label="Generative particle letter"></div>
+            </div>
+            <article class="river-letter" aria-label="Unlocked letter">
+              <p class="preview-recipient" id="riverRecipient"></p>
+              <h2 id="riverLetterTitle"></h2>
+              <p id="riverLetterMessage"></p>
+            </article>
+          </div>
+        </section>
+      </main>
+
+      <div class="modal-backdrop" id="unlockModal" aria-hidden="true">
+        <form class="unlock-card" id="unlockForm">
+          <div class="section-kicker">Private opening</div>
+          <h2 id="unlockTitle">Unlock letter</h2>
+          <p id="unlockPrompt" class="muted"></p>
+          <label class="field">
+            <span>Access key</span>
+            <input id="unlockKeyInput" type="password" required autocomplete="off" />
+          </label>
+          <div class="form-actions">
+            <button class="primary-button" type="submit">Open</button>
+            <button class="quiet-button" type="button" id="cancelUnlockButton">Cancel</button>
+          </div>
+          <p class="status-line" id="unlockStatus" role="status"></p>
+        </form>
+      </div>
+
+      <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    </div>
+  </body>
+</html>
