@@ -3,6 +3,7 @@
 
   const STORE_KEY = "letters-in-motion:v1";
   const MAX_GALLERY_BODIES = 18;
+  const MAX_MESSAGE_LENGTH = 5200;
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
 
@@ -17,7 +18,9 @@
     riverSketch: null,
     currentRiver: null,
     audioContext: null,
+    keySoundCounter: 0,
     toastTimer: 0,
+    revealTimer: 0,
   };
 
   const el = {};
@@ -87,6 +90,7 @@
     el.backToGalleryButton = $("#backToGalleryButton");
     el.replayRiverButton = $("#replayRiverButton");
     el.riverCanvas = $("#riverCanvas");
+    el.riverLetter = $("#riverLetter");
     el.riverRecipient = $("#riverRecipient");
     el.riverLetterTitle = $("#riverLetterTitle");
     el.riverLetterMessage = $("#riverLetterMessage");
@@ -127,6 +131,7 @@
       input.addEventListener("input", updatePreview);
       input.addEventListener("keydown", handleTypingFeedback);
     });
+    el.messageInput.maxLength = MAX_MESSAGE_LENGTH;
 
     window.addEventListener("hashchange", () => {
       const shared = readSharedRecord();
@@ -455,12 +460,10 @@
   }
 
   function playKeyClick() {
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContext) return;
-    if (!state.audioContext) state.audioContext = new AudioContext();
-    const context = state.audioContext;
-    if (context.state === "suspended") context.resume();
+    const context = ensureAudioContext();
+    if (!context) return;
 
+    state.keySoundCounter += 1;
     const now = context.currentTime;
     const duration = 0.045 + Math.random() * 0.025;
     const buffer = context.createBuffer(1, Math.floor(context.sampleRate * duration), context.sampleRate);
@@ -476,7 +479,7 @@
     filter.frequency.value = 900 + Math.random() * 700;
     const gain = context.createGain();
     gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.08, now + 0.004);
+    gain.gain.exponentialRampToValueAtTime(0.064, now + 0.004);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
 
     noise.connect(filter);
@@ -484,6 +487,81 @@
     gain.connect(context.destination);
     noise.start(now);
     noise.stop(now + duration);
+
+    if (state.keySoundCounter % 6 === 0 || Math.random() > 0.88) {
+      playChimeTone(context, now + 0.015, 1320 + Math.random() * 520, 0.42, 0.018, Math.random() * 1.2 - 0.6);
+    }
+  }
+
+  function ensureAudioContext() {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return null;
+    if (!state.audioContext) state.audioContext = new AudioContext();
+    const context = state.audioContext;
+    if (context.state === "suspended") context.resume();
+    return context;
+  }
+
+  function playUnlockBloom() {
+    const context = ensureAudioContext();
+    if (!context) return;
+    const now = context.currentTime;
+    const notes = [784, 988, 1175, 1319, 1568, 1760, 2093];
+    notes.forEach((frequency, index) => {
+      playChimeTone(context, now + index * 0.055, frequency, 1.25 + index * 0.04, 0.035, (index - 3) / 5);
+    });
+
+    const duration = 0.62;
+    const buffer = context.createBuffer(1, Math.floor(context.sampleRate * duration), context.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i += 1) {
+      const t = i / data.length;
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 2.2);
+    }
+
+    const shimmer = context.createBufferSource();
+    shimmer.buffer = buffer;
+    const highpass = context.createBiquadFilter();
+    highpass.type = "highpass";
+    highpass.frequency.value = 1800;
+    const gain = context.createGain();
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.026, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    shimmer.connect(highpass);
+    highpass.connect(gain);
+    gain.connect(context.destination);
+    shimmer.start(now);
+    shimmer.stop(now + duration);
+  }
+
+  function playChimeTone(context, start, frequency, duration, volume, panValue = 0) {
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    const filter = context.createBiquadFilter();
+    const panner = context.createStereoPanner ? context.createStereoPanner() : null;
+
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(frequency, start);
+    oscillator.frequency.exponentialRampToValueAtTime(frequency * 0.992, start + duration);
+    filter.type = "bandpass";
+    filter.frequency.setValueAtTime(frequency * 1.4, start);
+    filter.Q.value = 6;
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(volume, start + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+
+    oscillator.connect(filter);
+    filter.connect(gain);
+    if (panner) {
+      panner.pan.setValueAtTime(panValue, start);
+      gain.connect(panner);
+      panner.connect(context.destination);
+    } else {
+      gain.connect(context.destination);
+    }
+    oscillator.start(start);
+    oscillator.stop(start + duration + 0.02);
   }
 
   async function encryptLetter(draft) {
@@ -931,14 +1009,20 @@
   }
 
   function startRiver(record, plaintext) {
+    window.clearTimeout(state.revealTimer);
     state.currentRiver = { record, plaintext };
     renderRiverLetter(plaintext);
     showView("river");
+    playUnlockBloom();
     destroyRiverSketch();
     state.riverSketch = createRiverSketch(plaintext);
+    state.revealTimer = window.setTimeout(() => {
+      el.riverLetter.classList.remove("is-revealing");
+    }, 4700);
   }
 
   function renderRiverLetter(plaintext) {
+    el.riverLetter.classList.add("is-revealing");
     el.riverRecipient.textContent = plaintext.recipient ? `To ${plaintext.recipient}` : "";
     el.riverLetterTitle.textContent = plaintext.title || "Untitled letter";
     el.riverLetterMessage.textContent = plaintext.message || "";
@@ -954,11 +1038,18 @@
     return new window.p5((p) => {
       let targets = [];
       let particles = [];
+      let petals = [];
+      let blooms = [];
+      let textBlock = null;
       let spawnIndex = 0;
-      let boatX = -80;
-      let boatY = 0;
+      let stableAlpha = 0;
       let frameStarted = false;
-      const palette = ["#f6d34d", "#fff8b8", "#f4c845", "#ffffff"];
+      let startMillis = 0;
+      const lock = { x: 0, y: 0 };
+      const palette = ["#f6d34d", "#fff8b8", "#f4c845", "#ffffff", "#f3b2c7"];
+      const rosePalette = ["#b84555", "#d66d8f", "#e9a8bb", "#f4c6ce", "#f2d3b1"];
+      const glyphPool = [...`${plaintext.title || ""}${plaintext.message || ""}`]
+        .filter((char) => char.trim() && char !== "\n");
 
       p.setup = () => {
         p.pixelDensity(1);
@@ -975,20 +1066,21 @@
 
       p.draw = () => {
         if (!frameStarted) {
-          p.background(32, 87, 187);
+          p.background(13, 42, 98);
           frameStarted = true;
         }
-        p.noStroke();
-        p.fill(9, 42, 114, 34);
-        p.rect(0, 0, p.width, p.height);
-        drawRiverLines();
-        moveBoat();
-        spawnParticles();
+        drawBackground();
+        drawFlowThreads();
+        drawEnvelope();
+        drawBouquet();
+        updatePetals();
+        spawnTextParticles();
         particles.forEach((particle) => {
           particle.update();
           particle.draw();
         });
-        drawBoat();
+        stableAlpha = easeOutCubic(p.constrain((sceneFrame() - 300) / 120, 0, 1));
+        drawStableText(stableAlpha);
       };
 
       p.windowResized = () => {
@@ -1000,6 +1092,8 @@
       };
 
       function rebuildTargets() {
+        lock.x = p.width * 0.5;
+        lock.y = p.height * 0.78;
         const g = p.createGraphics(p.width, p.height);
         g.pixelDensity(1);
         g.clear();
@@ -1007,8 +1101,8 @@
         g.noStroke();
         g.fill(255);
 
-        const textBlock = buildTextBlock(g, plaintext);
-        const startY = Math.max(80, (p.height - textBlock.lines.length * textBlock.leading) / 2);
+        textBlock = buildTextBlock(g, plaintext);
+        const startY = textBlock.y;
         g.textSize(textBlock.size);
         g.textLeading(textBlock.leading);
         g.textAlign(p.LEFT, p.TOP);
@@ -1018,28 +1112,38 @@
 
         g.loadPixels();
         targets = [];
-        const step = p.width < 680 ? 5 : 6;
+        const step = p.width < 680 ? 5 : 4;
+        let glyphIndex = 0;
         for (let y = 0; y < g.height; y += step) {
           for (let x = 0; x < g.width; x += step) {
             const alpha = g.pixels[(y * g.width + x) * 4 + 3];
-            if (alpha > 36) targets.push({ x, y });
+            if (alpha > 36) {
+              const glyph = glyphPool.length ? glyphPool[glyphIndex % glyphPool.length] : "*";
+              targets.push({ x, y, glyph, index: glyphIndex });
+              glyphIndex += 1;
+            }
           }
         }
-        shuffle(targets);
-        const maxTargets = p.width < 680 ? 950 : 1750;
+        const maxTargets = p.width < 680 ? 2600 : 5200;
+        targets.sort((a, b) => (a.y - b.y) || (a.x - b.x));
         targets = targets.slice(0, maxTargets);
         g.remove();
+        buildBloomTargets();
       }
 
       function buildTextBlock(g, letter) {
-        const maxWidth = p.width * 0.76;
-        const maxHeight = p.height * 0.72;
-        const source = [letter.title, "", letter.message].join("\n");
-        let size = Math.min(42, Math.max(19, p.width / 24));
+        const maxWidth = p.width * (p.width < 680 ? 0.78 : 0.62);
+        const maxHeight = p.height * 0.42;
+        const toLine = letter.recipient ? `To ${letter.recipient}` : "";
+        const source = [toLine, letter.title, "", letter.message].filter((line, index) => {
+          return index < 3 || String(line || "").trim();
+        }).join("\n");
+        let size = Math.min(34, Math.max(18, p.width / 31));
         let lines = [];
         let leading = size * 1.38;
+        let wasTrimmed = false;
 
-        while (size >= 14) {
+        while (size >= 11) {
           g.textSize(size);
           lines = [];
           source.split("\n").forEach((paragraph) => {
@@ -1053,12 +1157,20 @@
           if (lines.length * leading <= maxHeight) break;
           size -= 2;
         }
+        const maxLines = Math.max(5, Math.floor(maxHeight / leading));
+        if (lines.length > maxLines) {
+          lines = lines.slice(0, maxLines - 1);
+          lines.push("...");
+          wasTrimmed = true;
+        }
 
         return {
           x: (p.width - maxWidth) / 2,
+          y: Math.max(48, p.height * 0.1),
           size,
           leading,
           lines,
+          wasTrimmed,
         };
       }
 
@@ -1082,74 +1194,225 @@
 
       function resetParticles() {
         particles = [];
+        petals = [];
         spawnIndex = 0;
-        boatX = -80;
+        stableAlpha = 0;
         frameStarted = false;
+        startMillis = p.millis();
+        createPetals();
       }
 
-      function moveBoat() {
-        boatX += Math.max(1.2, p.width / 520);
-        if (boatX > p.width + 90 && spawnIndex >= targets.length) {
-          boatX = p.width + 90;
-        } else if (boatX > p.width + 90) {
-          boatX = -80;
+      function sceneFrame() {
+        return (p.millis() - startMillis) / 16.67;
+      }
+
+      function buildBloomTargets() {
+        blooms = [];
+        const centerX = p.width * 0.5;
+        const topY = p.height * 0.54;
+        const count = p.width < 680 ? 7 : 11;
+        for (let i = 0; i < count; i += 1) {
+          const row = i % 3;
+          const spread = p.map(i, 0, count - 1, -1, 1);
+          blooms.push({
+            start: p.createVector(lock.x, lock.y - 6),
+            target: p.createVector(
+              centerX + spread * p.width * 0.19 + Math.sin(i * 1.9) * 16,
+              topY + row * 20 + Math.cos(i * 1.4) * 14,
+            ),
+            radius: p.random(23, p.width < 680 ? 34 : 44),
+            color: rosePalette[i % rosePalette.length],
+            delay: i * 4,
+            spin: p.random(-0.7, 0.7),
+          });
         }
-        boatY = p.height * 0.68 + Math.sin(p.frameCount * 0.025) * 24;
       }
 
-      function spawnParticles() {
-        const rate = Math.max(3, Math.ceil(targets.length / 360));
-        for (let i = 0; i < rate && spawnIndex < targets.length; i += 1) {
+      function createPetals() {
+        const count = p.width < 680 ? 42 : 68;
+        for (let i = 0; i < count; i += 1) {
+          const angle = p.random(-p.PI * 0.95, -p.PI * 0.05);
+          const distance = p.random(p.width * 0.08, p.width * 0.42);
+          petals.push(new Petal(
+            lock.x,
+            lock.y,
+            lock.x + Math.cos(angle) * distance,
+            lock.y + Math.sin(angle) * distance - p.random(20, 120),
+            i,
+          ));
+        }
+      }
+
+      function spawnTextParticles() {
+        const frame = sceneFrame();
+        if (frame < 62) return;
+        const progress = p.constrain((frame - 62) / 250, 0, 1);
+        const desiredCount = Math.floor(targets.length * easeOutCubic(progress));
+        const rate = Math.max(18, Math.ceil(targets.length / 80));
+        for (let i = 0; i < rate && spawnIndex < targets.length && spawnIndex <= desiredCount; i += 1) {
           const target = targets[spawnIndex];
-          particles.push(new StarParticle(boatX + p.random(-10, 18), boatY + p.random(-8, 8), target));
+          particles.push(new TextParticle(target, spawnIndex));
           spawnIndex += 1;
         }
       }
 
-      function drawRiverLines() {
+      function drawBackground() {
+        const ctx = p.drawingContext;
+        ctx.save();
+        const gradient = ctx.createLinearGradient(0, 0, p.width, p.height);
+        gradient.addColorStop(0, "#092a72");
+        gradient.addColorStop(0.45, "#143b83");
+        gradient.addColorStop(1, "#1f5aaf");
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, p.width, p.height);
+        ctx.restore();
+
+        p.noStroke();
+        for (let i = 0; i < 36; i += 1) {
+          const x = (i * 97 + p.frameCount * 0.18) % p.width;
+          const y = (i * 53) % p.height;
+          p.fill(255, 248, 232, 8 + (i % 3) * 4);
+          p.circle(x, y, 1.2 + (i % 4));
+        }
+      }
+
+      function drawFlowThreads() {
+        const frame = sceneFrame();
         p.noFill();
-        p.stroke(255, 248, 232, 48);
+        p.stroke(255, 248, 232, 30);
         p.strokeWeight(1);
-        for (let i = 0; i < 8; i += 1) {
-          const x = p.map(i, 0, 7, p.width * 0.12, p.width * 0.88);
+        for (let i = 0; i < 7; i += 1) {
+          const x = p.map(i, 0, 6, p.width * 0.13, p.width * 0.87);
           p.beginShape();
-          for (let y = 80; y < p.height - 30; y += 40) {
-            p.curveVertex(x + Math.sin(y * 0.015 + i) * 18, y);
+          for (let y = 48; y < p.height - 30; y += 34) {
+            const wave = Math.sin(y * 0.017 + i + frame * 0.012) * 16;
+            p.curveVertex(x + wave, y);
           }
           p.endShape();
         }
       }
 
-      function drawBoat() {
+      function drawEnvelope() {
+        const frame = sceneFrame();
+        const open = easeOutCubic(p.constrain((frame - 24) / 80, 0, 1));
+        const burst = p.constrain((frame - 38) / 50, 0, 1);
+        const width = Math.min(180, p.width * 0.32);
+        const height = width * 0.58;
+        const x = lock.x;
+        const y = lock.y + 8;
+
         p.push();
-        p.translate(boatX, boatY);
+        p.translate(x, y);
         p.noStroke();
-        p.fill(255, 248, 232, 230);
+        p.fill(0, 0, 0, 38);
+        p.rect(-width / 2 + 6, -height / 2 + 8, width, height, 8);
+        p.fill(255, 248, 232, 234);
+        p.rect(-width / 2, -height / 2, width, height, 8);
+        p.stroke(150, 106, 67, 120);
+        p.strokeWeight(1.2);
+        p.line(-width / 2, -height / 2, 0, 2);
+        p.line(width / 2, -height / 2, 0, 2);
+        p.line(-width / 2, height / 2, -10, 0);
+        p.line(width / 2, height / 2, 10, 0);
+        p.noStroke();
+        p.fill(255, 235, 183, 190);
         p.beginShape();
-        p.vertex(-32, -4);
-        p.vertex(34, -4);
-        p.vertex(18, 17);
-        p.vertex(-18, 17);
+        p.vertex(-width / 2, -height / 2);
+        p.vertex(0, -height / 2 - open * 52);
+        p.vertex(width / 2, -height / 2);
+        p.vertex(0, 2);
         p.endShape(p.CLOSE);
-        p.fill(220, 230, 242, 230);
-        p.triangle(-28, -4, -3, -29, 4, -4);
-        p.triangle(5, -4, 26, -24, 30, -4);
-        p.stroke(255, 248, 232, 120);
-        p.line(34, 2, 80, -18);
+        p.fill(157, 45, 40, 230);
+        p.circle(0, 4, 24 + Math.sin(p.frameCount * 0.17) * 1.5);
+        p.fill(255, 248, 232, 220 * open);
+        p.circle(0, 4, 7 + open * 4);
+        p.pop();
+
+        if (burst > 0 && burst < 1) {
+          p.push();
+          p.translate(lock.x, lock.y);
+          p.stroke(255, 248, 184, 170 * (1 - burst));
+          p.strokeWeight(1.2);
+          for (let i = 0; i < 18; i += 1) {
+            const angle = (i / 18) * p.TWO_PI + p.frameCount * 0.01;
+            const inner = 12 + burst * 12;
+            const outer = 38 + burst * 150;
+            p.line(Math.cos(angle) * inner, Math.sin(angle) * inner, Math.cos(angle) * outer, Math.sin(angle) * outer);
+          }
+          p.pop();
+        }
+      }
+
+      function drawBouquet() {
+        const frame = sceneFrame();
+        const global = easeOutCubic(p.constrain((frame - 18) / 120, 0, 1));
+        if (global <= 0) return;
+
+        p.push();
+        p.stroke(71, 119, 103, 150 * global);
+        p.strokeWeight(1.15);
+        blooms.forEach((bloom) => {
+          const head = window.p5.Vector.lerp(bloom.start, bloom.target, global);
+          p.line(lock.x, lock.y + 6, head.x, head.y + bloom.radius * 0.42);
+        });
+        p.pop();
+
+        blooms.forEach((bloom) => {
+          const local = easeOutBack(p.constrain((frame - 34 - bloom.delay) / 78, 0, 1));
+          if (local <= 0) return;
+          const pos = window.p5.Vector.lerp(bloom.start, bloom.target, local);
+          const radius = bloom.radius * local;
+          drawRose(pos.x, pos.y, radius, bloom.color, bloom.spin + p.frameCount * 0.003);
+        });
+      }
+
+      function updatePetals() {
+        petals.forEach((petal) => {
+          petal.update();
+          petal.draw();
+        });
+      }
+
+      function drawStableText(alpha) {
+        if (!textBlock || alpha <= 0) return;
+        p.push();
+        p.noStroke();
+        p.textFont("Georgia");
+        p.textAlign(p.LEFT, p.TOP);
+        p.textSize(textBlock.size);
+        p.textLeading(textBlock.leading);
+        p.fill(8, 21, 38, 150 * alpha);
+        textBlock.lines.forEach((line, index) => {
+          p.text(line, textBlock.x + 2, textBlock.y + index * textBlock.leading + 2, p.width - textBlock.x * 2);
+        });
+        p.fill(255, 248, 232, 235 * alpha);
+        textBlock.lines.forEach((line, index) => {
+          p.text(line, textBlock.x, textBlock.y + index * textBlock.leading, p.width - textBlock.x * 2);
+        });
+        if (textBlock.wasTrimmed) {
+          p.textSize(12);
+          p.fill(255, 248, 232, 150 * alpha);
+          p.text("Full letter is readable on the paper panel.", textBlock.x, p.height - 34);
+        }
         p.pop();
       }
 
-      class StarParticle {
-        constructor(x, y, target) {
-          this.pos = p.createVector(x, y);
-          this.vel = p.createVector(p.random(0.4, 2.4), p.random(-1.4, 1.4));
+      class TextParticle {
+        constructor(target, index) {
+          const angle = p.random(-p.PI, 0);
+          const radius = p.random(6, 44);
+          this.pos = p.createVector(lock.x + Math.cos(angle) * radius, lock.y + Math.sin(angle) * radius);
+          this.vel = p.createVector(Math.cos(angle) * p.random(1.5, 4.8), Math.sin(angle) * p.random(1.5, 4.8));
           this.acc = p.createVector(0, 0);
           this.target = p.createVector(target.x, target.y);
-          this.size = p.random(2.2, 5.6);
-          this.maxSpeed = p.random(3.4, 5.2);
-          this.maxForce = p.random(0.12, 0.22);
+          this.glyph = target.glyph || "*";
+          this.size = p.random(2.1, 4.8);
+          this.maxSpeed = p.random(4.2, 7.8);
+          this.maxForce = p.random(0.13, 0.32);
           this.color = palette[Math.floor(p.random(palette.length))];
-          this.kind = p.random() > 0.72 ? "moon" : p.random() > 0.5 ? "star" : "dot";
+          this.kind = index % 7 === 0 ? "glyph" : index % 11 === 0 ? "star" : "dot";
+          this.phase = p.random(p.TWO_PI);
+          this.settled = false;
         }
 
         update() {
@@ -1160,35 +1423,111 @@
           desired.setMag(speed);
           const steer = window.p5.Vector.sub(desired, this.vel);
           steer.limit(this.maxForce);
+          const flowAngle = p.noise(this.pos.x * 0.004, this.pos.y * 0.004, p.frameCount * 0.008) * p.TWO_PI * 2;
+          const flow = p.createVector(Math.cos(flowAngle), Math.sin(flowAngle)).mult(distance > 34 ? 0.045 : 0.012);
           this.acc.add(steer);
+          this.acc.add(flow);
           this.vel.add(this.acc);
-          this.vel.mult(distance < 28 ? 0.88 : 0.985);
+          this.vel.mult(distance < 28 ? 0.86 : 0.982);
           this.pos.add(this.vel);
           this.acc.mult(0);
-          if (distance < 1.2) {
+          if (distance < 1.4) {
             this.pos.lerp(this.target, 0.4);
             this.vel.mult(0);
+            this.settled = true;
           }
         }
 
         draw() {
           const ctx = p.drawingContext;
           ctx.save();
-          ctx.shadowBlur = 14;
-          ctx.shadowColor = "rgba(246, 211, 77, 0.75)";
+          ctx.shadowBlur = this.settled ? 7 : 15;
+          ctx.shadowColor = `rgba(246, 211, 77, ${0.72 - stableAlpha * 0.42})`;
           p.noStroke();
-          p.fill(this.color);
-          if (this.kind === "moon") {
-            p.circle(this.pos.x, this.pos.y, this.size * 2.5);
-            p.fill(32, 87, 187, 230);
-            p.circle(this.pos.x + this.size * 0.65, this.pos.y - this.size * 0.2, this.size * 2.2);
+          const particleColor = p.color(this.color);
+          particleColor.setAlpha(this.settled ? 230 - stableAlpha * 150 : 235);
+          p.fill(particleColor);
+          if (this.kind === "glyph") {
+            p.textAlign(p.CENTER, p.CENTER);
+            p.textFont("Georgia");
+            p.textSize(this.size * 3.2);
+            p.text(this.glyph, this.pos.x, this.pos.y);
           } else if (this.kind === "star") {
-            drawStar(this.pos.x, this.pos.y, this.size * 0.55, this.size * 1.45, 5);
+            const pulse = 0.85 + Math.sin(p.frameCount * 0.08 + this.phase) * 0.22;
+            drawStar(this.pos.x, this.pos.y, this.size * 0.5 * pulse, this.size * 1.38 * pulse, 5);
           } else {
-            p.circle(this.pos.x, this.pos.y, this.size);
+            const pulse = this.settled ? 0.85 + Math.sin(p.frameCount * 0.07 + this.phase) * 0.18 : 1;
+            p.circle(this.pos.x, this.pos.y, this.size * pulse);
           }
           ctx.restore();
         }
+      }
+
+      class Petal {
+        constructor(startX, startY, targetX, targetY, index) {
+          this.start = p.createVector(startX, startY);
+          this.target = p.createVector(targetX, targetY);
+          this.pos = this.start.copy();
+          this.index = index;
+          this.size = p.random(8, 19);
+          this.delay = p.random(18, 76);
+          this.phase = p.random(p.TWO_PI);
+          this.color = p.random(["#f4b7c6", "#eaa3b7", "#f0c4cd", "#f2d3b1"]);
+        }
+
+        update() {
+          const frame = sceneFrame();
+          const t = p.constrain((frame - this.delay) / 135, 0, 1);
+          const eased = easeOutCubic(t);
+          this.pos = window.p5.Vector.lerp(this.start, this.target, eased);
+          if (t >= 1) {
+            this.pos.x += Math.sin(p.frameCount * 0.018 + this.phase) * 18;
+            this.pos.y += Math.sin(p.frameCount * 0.012 + this.phase) * 9;
+          }
+        }
+
+        draw() {
+          const frame = sceneFrame();
+          const t = p.constrain((frame - this.delay) / 135, 0, 1);
+          if (t <= 0) return;
+          p.push();
+          p.translate(this.pos.x, this.pos.y);
+          p.rotate(Math.sin(p.frameCount * 0.026 + this.phase) * 0.9);
+          p.noStroke();
+          p.fill(this.color + Math.floor(190 * (1 - t * 0.35)).toString(16).padStart(2, "0"));
+          p.ellipse(0, 0, this.size * 0.76, this.size * 1.25);
+          p.pop();
+        }
+      }
+
+      function drawRose(x, y, radius, color, rotation) {
+        p.push();
+        p.translate(x, y);
+        p.rotate(rotation);
+        const ctx = p.drawingContext;
+        ctx.save();
+        ctx.shadowBlur = 16;
+        ctx.shadowColor = "rgba(255, 190, 210, 0.45)";
+        p.noStroke();
+        p.fill(color);
+        p.circle(0, 0, radius * 1.55);
+        for (let ring = 4; ring >= 1; ring -= 1) {
+          const petalsInRing = ring * 5;
+          const ringRadius = radius * (ring / 5);
+          p.fill(lightenColor(color, ring * 14));
+          for (let i = 0; i < petalsInRing; i += 1) {
+            p.push();
+            const angle = (i / petalsInRing) * p.TWO_PI + ring * 0.38;
+            p.rotate(angle);
+            p.translate(ringRadius * 0.48, 0);
+            p.ellipse(0, 0, radius * 0.22 + ring * 1.6, radius * 0.55);
+            p.pop();
+          }
+        }
+        p.fill(255, 236, 226, 180);
+        p.circle(0, 0, radius * 0.22);
+        ctx.restore();
+        p.pop();
       }
 
       function drawStar(x, y, innerRadius, outerRadius, points) {
@@ -1199,6 +1538,24 @@
           p.vertex(x + Math.cos(angle) * radius, y + Math.sin(angle) * radius);
         }
         p.endShape(p.CLOSE);
+      }
+
+      function easeOutCubic(t) {
+        return 1 - Math.pow(1 - t, 3);
+      }
+
+      function easeOutBack(t) {
+        const c1 = 1.70158;
+        const c3 = c1 + 1;
+        return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+      }
+
+      function lightenColor(hex, amount) {
+        const value = hex.replace("#", "");
+        const r = Math.min(255, parseInt(value.slice(0, 2), 16) + amount);
+        const g = Math.min(255, parseInt(value.slice(2, 4), 16) + amount);
+        const b = Math.min(255, parseInt(value.slice(4, 6), 16) + amount);
+        return `rgb(${r}, ${g}, ${b})`;
       }
     }, el.riverCanvas);
   }

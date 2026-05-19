@@ -671,7 +671,9 @@ textarea {
 
 .river-canvas-wrap {
   min-height: max(440px, calc(100vh - 180px));
-  background: var(--blue-night);
+  background:
+    radial-gradient(circle at 50% 72%, rgba(244, 200, 69, 0.2), transparent 32%),
+    linear-gradient(135deg, var(--blue-deep), var(--blue-night));
 }
 
 .river-canvas-wrap .canvas-host {
@@ -685,6 +687,10 @@ textarea {
   max-height: calc(100vh - 180px);
   padding: 20px;
   overflow: auto;
+  transition:
+    opacity 900ms ease,
+    filter 900ms ease,
+    transform 900ms ease;
 }
 
 .river-letter h2 {
@@ -696,6 +702,12 @@ textarea {
   margin: 0;
   white-space: pre-wrap;
   line-height: 1.65;
+}
+
+.river-letter.is-revealing {
+  opacity: 0.46;
+  filter: blur(0.8px);
+  transform: translateY(6px);
 }
 
 @media (max-width: 1060px) {

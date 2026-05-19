@@ -16,7 +16,7 @@
           <span class="brand-mark" aria-hidden="true">L</span>
           <span>
             <span class="brand-title">Letters in Motion</span>
-            <span class="brand-subtitle">encrypted generative letters</span>
+            <span class="brand-subtitle">person-to-person generative letters</span>
           </span>
         </button>
         <nav class="view-tabs" aria-label="Application sections">
@@ -67,11 +67,11 @@
               </label>
 
               <label class="field message-field">
-                <span>Message</span>
+                <span>Message, up to 5,200 characters</span>
                 <textarea
                   id="messageInput"
                   name="message"
-                  maxlength="1800"
+                  maxlength="5200"
                   required
                   placeholder="Begin with the words only they should receive..."
                 ></textarea>
@@ -142,15 +142,15 @@
             <button class="quiet-button" type="button" id="backToGalleryButton">Gallery</button>
             <div>
               <div class="section-kicker">Phase 3</div>
-              <h1 id="riverTitle">River of Stars</h1>
+              <h1 id="riverTitle">Blooming Letter</h1>
             </div>
             <button class="quiet-button" type="button" id="replayRiverButton">Replay</button>
           </div>
           <div class="river-layout">
             <div class="river-canvas-wrap">
-              <div id="riverCanvas" class="canvas-host" aria-label="Generative particle letter"></div>
+              <div id="riverCanvas" class="canvas-host" aria-label="Text-driven particle letter"></div>
             </div>
-            <article class="river-letter" aria-label="Unlocked letter">
+            <article class="river-letter" id="riverLetter" aria-label="Unlocked letter">
               <p class="preview-recipient" id="riverRecipient"></p>
               <h2 id="riverLetterTitle"></h2>
               <p id="riverLetterMessage"></p>

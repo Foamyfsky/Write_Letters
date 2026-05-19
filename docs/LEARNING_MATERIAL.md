@@ -1,14 +1,14 @@
-# Interactive Generative Art Messaging App
+# Interactive Generative Letter App
 
 ## 1. Purpose
 
-This project is a private digital letter-writing app. A user writes a letter, seals it with an access key, sees it become a movable object in a physics gallery, and opens it as a generative particle animation.
+This project is a private digital letter-writing app for person-to-person messages. A writer creates a letter, seals it with an access key, stores it in their own local gallery, and shares an encrypted link. A recipient unlocks the letter with the key and sees the sealed message bloom into a particle animation before settling into readable text.
 
 The app has three phases:
 
 1. Typewriter interface: collect the message with tactile visual and audio feedback.
-2. Wind chime gallery: display encrypted letters as draggable hanging envelopes.
-3. River of Stars: decrypt the selected letter and rebuild its text with particles.
+2. Wind chime gallery: display encrypted letters as draggable hanging envelopes owned by this browser.
+3. Blooming Letter: open an envelope with the key, burst a neutral bouquet from the seal, and rebuild the actual letter text with particles.
 
 The plaintext letter is never saved to browser storage. Saved and shared letters contain encrypted data only.
 
@@ -26,15 +26,13 @@ Write_Letters/
 
 `index.html` defines the three application phases and loads `p5.js`, `Matter.js`, the stylesheet, and the app logic.
 
-`src/styles.css` controls the tactile paper interface, keyboard, modal, gallery layout, and responsive presentation.
+`src/styles.css` controls the paper interface, layout, keyboard, modal, gallery, reading panel, and responsive presentation.
 
-`src/app.js` contains state management, encryption, local storage, sharing, audio feedback, the Matter.js gallery, and the p5.js river scene.
-
-`docs/LEARNING_MATERIAL.md` explains how the project works.
+`src/app.js` contains state management, encryption, local storage, sharing, audio feedback, the Matter.js gallery, and the p5.js text-particle reveal.
 
 ## 3. Data And Privacy Model
 
-The core data is the user's letter:
+The core plaintext data is:
 
 ```js
 {
@@ -52,7 +50,7 @@ Before saving, the app encrypts this object in the browser:
 3. AES-GCM encrypts the plaintext letter.
 4. The encrypted record is saved to `localStorage`.
 
-The saved record contains metadata for display plus encrypted content:
+The saved record contains display metadata plus encrypted content:
 
 ```js
 {
@@ -61,9 +59,13 @@ The saved record contains metadata for display plus encrypted content:
   recipient,
   keyPrompt,
   createdAt,
+  accent,
   crypto: {
-    alg: "AES-GCM",
-    kdf: "PBKDF2",
+    v,
+    alg,
+    kdf,
+    hash,
+    iterations,
     salt,
     iv,
     data
@@ -73,26 +75,24 @@ The saved record contains metadata for display plus encrypted content:
 
 The access key is not stored. The shared URL places the encrypted record in the URL fragment after `#open=...`. URL fragments are not sent to a web server during normal HTTP requests. The recipient still needs the access key to decrypt the letter.
 
-Important limitation: this is client-side privacy, not identity-based account security. Anyone with both the encrypted link and the correct key can open the letter. For production use, add authenticated accounts, server-side access controls, rate limiting, and audited key handling.
+Important limitation: this is client-side privacy, not account security. Anyone with both the encrypted link and the correct key can open the letter. For production use, add authenticated accounts, server-side access controls, rate limiting, and audited key handling.
 
 ## 4. Phase 1: Typewriter Interface
 
-The typewriter stage uses normal HTML inputs instead of canvas. This keeps text entry accessible, selectable, and mobile-friendly.
+The typewriter stage uses native HTML inputs so writing remains accessible, selectable, and mobile-friendly.
 
 Main parts:
 
-- `textarea`: stores the draft message.
+- `textarea`: stores the draft message, currently up to 5,200 characters.
 - Virtual keyboard: inserts characters into the textarea.
-- Web Audio API: generates short randomized mechanical click sounds.
-- CSS animation: makes typed glyphs float and fade.
+- Web Audio API: generates short mechanical clicks and occasional crystalline chime tones.
+- CSS animation: makes typed glyphs float and fade above the paper preview.
 
-The sound is generated instead of loaded from audio files. Each key press creates a short noise buffer, passes it through a bandpass filter, and applies a quick gain envelope. Random frequency and duration changes prevent the feedback from feeling repetitive.
-
-The phase ends when the user selects `Seal letter`. At that point the message is encrypted and saved as an envelope record.
+The typing sound is procedural. Each key press creates a short noise buffer, filters it with a bandpass filter, and shapes it with a gain envelope. Every few keystrokes, a quiet sine-wave chime is layered above the click, giving the feeling of wind chimes or tiny stars without loading audio files.
 
 ## 5. Phase 2: Matter.js Wind Chime Gallery
 
-Matter.js provides a 2D physics simulation. p5.js draws the visual scene.
+Matter.js provides a 2D physics simulation. p5.js draws the gallery.
 
 The gallery uses these Matter.js concepts:
 
@@ -103,90 +103,111 @@ The gallery uses these Matter.js concepts:
 - `Constraint`: connects an envelope to an anchor point.
 - `MouseConstraint`: lets the user drag and toss envelopes.
 
-Each letter is a dynamic rectangle. Each anchor point is fixed near the top of the canvas. A constraint connects the anchor to the envelope, creating a spring-like hanging motion.
+Each encrypted letter becomes a hanging envelope. Gravity pulls it down, the constraint acts like a string, damping removes excess motion, and collisions keep envelopes from passing through each other. This supports the person-to-person mechanism: the writer's gallery is built from letters they personally wrote and sealed.
 
-Why the envelopes move as expected:
+## 6. Phase 3: Blooming Letter
 
-- Gravity pulls each envelope downward.
-- The constraint resists stretching beyond its target length.
-- Stiffness controls how strongly the string pulls back.
-- Damping removes energy so the envelope settles instead of shaking forever.
-- Collision resolution prevents envelopes from passing through each other.
-- Mouse constraint temporarily attaches a body to the cursor, so dragging feels physical.
-
-Opening a letter destroys the Matter.js scene before starting the particle scene. This releases the physics world and avoids running two animation systems at once.
-
-## 6. Phase 3: p5.js River Of Stars
-
-The river scene uses p5.js only. It converts text into particle destinations, then steers particles toward those positions.
+The unlock scene uses p5.js. It is designed so the animation belongs to the actual letter, not to a generic star background.
 
 ### Text Sampling
 
-The app creates an off-screen p5 graphics buffer:
+The app creates an offscreen p5 graphics buffer:
 
-1. Draw the decrypted title and message into the hidden buffer.
-2. Read the buffer pixels with `loadPixels()`.
-3. Store the coordinates of visible text pixels.
-4. Limit the number of target points for performance.
+1. Build a text block from the recipient, title, and message.
+2. Draw that text into a hidden `createGraphics()` buffer.
+3. Call `loadPixels()` on the hidden buffer.
+4. Store the coordinates of visible text pixels.
+5. Convert those coordinates into particle targets.
 
-Those coordinates become particle destinations.
+Those target points preserve the shape of the typed words. Some moving particles also draw real glyphs from the letter text, so the message appears as both readable language and luminous motion.
 
-### Particle Emitter
+Long letters remain fully readable in the paper panel. The canvas reveal samples as much text as can fit gracefully; if the canvas text block is trimmed, the full unlocked letter still appears in the reading panel.
 
-A paper boat moves across the screen with a sine-wave vertical motion. As it moves, it emits particles. Each new particle receives one target coordinate from the sampled text.
+### Unlock Bouquet
 
-### Arrival Steering
+When the envelope opens, the wax seal becomes the origin point for a neutral floral burst:
 
-Each particle uses steering behavior:
+- rose-like blooms grow from the seal using procedural p5 shapes;
+- muted reds, blush tones, cream, and green stems match the existing paper and blue-night palette;
+- drifting petals and lock rays create the burst without making the effect exclusively romantic.
 
-1. Compute the vector from current position to target.
+No image asset or paid service is required. The bouquet is drawn with circles, ellipses, lines, alpha, easing, and shadow blur.
+
+### Particle Motion
+
+The letter particles use arrival steering:
+
+1. Compute the vector from the particle to its text target.
 2. Convert that vector into a desired velocity.
 3. Subtract the current velocity to get a steering force.
-4. Limit the steering force so motion remains smooth.
-5. Reduce speed near the target so the particle arrives without overshooting.
+4. Add a small noise-based flow-field force.
+5. Slow the particle near the target so it settles instead of overshooting.
 
-This is called arrival behavior. It creates motion that feels intentional rather than linear or mechanical.
+The noise field makes the motion feel airy and organic. The arrival force makes the particles eventually stabilize into the sampled letter.
 
-### Visual Treatment
+The major reveal stages use elapsed time instead of raw frame counts. That keeps the unlock, bouquet, particle formation, and stable reading state moving at the intended pace even if a browser slows animation frames in the background.
 
-The scene keeps a low-opacity blue overlay instead of fully clearing the canvas each frame. This leaves soft trails behind moving particles.
+### Stable Reading State
 
-Particles vary in size and shape:
+During the first seconds, the paper panel is slightly blurred and dimmed. After the bloom and particle reveal, the panel becomes fully readable. This keeps the opening ritual connected to the final letter instead of showing a separate animation beside an already-finished message.
 
-- small dots
-- star shapes
-- crescent moons
+## 7. Web Audio
 
-Gold, cream, and white colors make the text feel luminous against the blue river.
+The app uses the Web Audio API directly:
 
-## 7. Efficiency Decisions
+- typing click: short filtered noise burst;
+- typing shimmer: occasional high sine tone;
+- unlock bloom: small cascade of sine tones plus a high-passed shimmer burst.
 
-The project stays efficient by:
+This keeps the app free and self-contained. Browser autoplay policies may require the sound to begin only after a user gesture such as typing, clicking, or unlocking.
 
-- using native DOM text input for writing;
-- saving only encrypted payloads;
-- capping rendered physics envelopes;
-- destroying unused p5 and Matter.js scenes during phase transitions;
-- limiting sampled particle targets;
-- using one animation loop per active phase;
-- generating audio clicks procedurally instead of loading many sound files.
+## 8. Future Theme System
 
-## 8. Build Tutorial
+The next expansion can add user-selectable regimes without paid AI APIs. A free version can use structured options and keyword matching:
 
-1. Create the static HTML shell with three sections: compose, gallery, and river.
-2. Add form fields for recipient, title, access key, key prompt, and message.
-3. Add Web Audio API key feedback and CSS glyph animation.
-4. On form submit, encrypt the plaintext letter with PBKDF2 and AES-GCM.
-5. Store only the encrypted record in `localStorage`.
-6. Build the gallery with Matter.js bodies, constraints, gravity, collisions, and mouse dragging.
-7. When an envelope is selected, request the access key and decrypt in memory.
-8. Destroy the physics sketch and start the p5.js river sketch.
-9. Draw decrypted text into an off-screen buffer and sample visible pixel coordinates.
-10. Emit particles from the moving boat and steer them toward the sampled text targets.
-11. Keep the decrypted readable letter visible only after successful unlock.
-12. Share letters by copying an encrypted URL fragment and sending the access key separately.
+```js
+const themes = {
+  birthday: {
+    palette: ["#ffd166", "#ef476f", "#ffffff"],
+    motion: "burst",
+    sound: "bright-chime",
+    shapes: ["spark", "confetti", "dot"]
+  },
+  farewell: {
+    palette: ["#d8dee9", "#8f9aa7", "#ffffff"],
+    motion: "slow-rise",
+    sound: "soft-bell",
+    shapes: ["light", "petal", "dot"]
+  },
+  childhoodFriend: {
+    palette: ["#f7c59f", "#70d6ff", "#ffffff"],
+    motion: "playful-orbit",
+    sound: "music-box",
+    shapes: ["spark", "paper-plane", "dot"]
+  }
+};
+```
 
-## 9. Production Hardening Checklist
+Users can choose relationship, occasion, mood, and animation intensity. Natural-language descriptions can be interpreted locally with keyword rules before any AI API is considered.
+
+## 9. Build Tutorial
+
+1. Create an HTML shell with compose, gallery, and reading sections.
+2. Use CSS to make the interface feel like paper, ink, envelopes, and a quiet night stage.
+3. Use native form fields for the actual writing experience.
+4. Add procedural typing audio with Web Audio.
+5. On submit, encrypt the plaintext letter with PBKDF2 and AES-GCM.
+6. Save only the encrypted record in `localStorage`.
+7. Use Matter.js to hang sealed envelopes in the writer's gallery.
+8. On unlock, decrypt the letter in memory.
+9. Draw the decrypted words into an offscreen p5 buffer.
+10. Sample visible pixels from that buffer as particle destinations.
+11. Emit particles and glyphs from the envelope seal.
+12. Add a procedural bouquet burst from the same seal point.
+13. Let particles settle into the sampled text.
+14. Reveal the stable paper panel for full reading.
+
+## 10. Production Hardening Checklist
 
 For a hosted multi-user product, add:
 
