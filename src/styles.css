@@ -677,7 +677,19 @@ textarea {
 }
 
 .river-canvas-wrap .canvas-host {
+  position: relative;
   min-height: max(440px, calc(100vh - 180px));
+}
+
+.river-canvas-wrap .canvas-host canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.river-canvas-wrap .canvas-host .cinematic-overlay {
+  display: block !important;
+  z-index: 1;
+  pointer-events: none;
 }
 
 .river-letter {
@@ -705,9 +717,9 @@ textarea {
 }
 
 .river-letter.is-revealing {
-  opacity: 0.46;
-  filter: blur(0.8px);
-  transform: translateY(6px);
+  opacity: 0;
+  filter: blur(2px);
+  transform: translateY(10px);
 }
 
 @media (max-width: 1060px) {
