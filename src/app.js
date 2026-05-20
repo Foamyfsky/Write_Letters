@@ -1067,7 +1067,7 @@
     state.riverSketch = createRiverSketch(plaintext);
     state.revealTimer = window.setTimeout(() => {
       el.riverLetter.classList.remove("is-revealing");
-    }, 12800);
+    }, 15000);
   }
 
   function renderRiverLetter(plaintext) {
@@ -1622,6 +1622,14 @@
         uniform vec2 u_resolution;
         uniform float u_time;
         uniform float u_collapse;
+        uniform vec4 u_ripple0;
+        uniform vec4 u_ripple1;
+        uniform vec4 u_ripple2;
+        uniform vec4 u_ripple3;
+        uniform vec4 u_ripple4;
+        uniform vec4 u_ripple5;
+        uniform vec4 u_ripple6;
+        uniform vec4 u_ripple7;
         varying vec2 vUv;
 
         float hash(vec2 p) {
@@ -1636,27 +1644,61 @@
           return smoothstep(0.034, 0.0, d) * step(0.982, seed);
         }
 
+        float rippleContribution(vec2 uv, vec4 ripple) {
+          float age = u_time - ripple.z;
+          float alive = step(0.0, age) * (1.0 - smoothstep(0.8, 3.0, age)) * ripple.w;
+          vec2 delta = uv - ripple.xy;
+          delta.y *= 3.2;
+          float d = length(delta);
+          float rings = 0.0;
+          rings += exp(-pow((d - age * 0.028) * 140.0, 2.0));
+          rings += exp(-pow((d - age * 0.042) * 160.0, 2.0)) * 0.72;
+          rings += exp(-pow((d - age * 0.058) * 185.0, 2.0)) * 0.48;
+          rings += exp(-pow((d - age * 0.071) * 200.0, 2.0)) * 0.28;
+          return rings * alive;
+        }
+
         void main() {
           vec2 uv = vUv;
           float waterLine = 0.58;
           float warm = 1.0 - smoothstep(0.18, 0.72, uv.y);
           float water = smoothstep(waterLine - 0.04, waterLine + 0.08, uv.y);
+          float ripple = 0.0;
+          ripple += rippleContribution(uv, u_ripple0);
+          ripple += rippleContribution(uv, u_ripple1);
+          ripple += rippleContribution(uv, u_ripple2);
+          ripple += rippleContribution(uv, u_ripple3);
+          ripple += rippleContribution(uv, u_ripple4);
+          ripple += rippleContribution(uv, u_ripple5);
+          ripple += rippleContribution(uv, u_ripple6);
+          ripple += rippleContribution(uv, u_ripple7);
           float wave = sin((uv.x * 24.0) + u_time * 0.45) * 0.006;
           wave += sin((uv.x * 9.0) - u_time * 0.22) * 0.009;
+          wave += ripple * 0.014;
 
-          vec3 darkTop = mix(vec3(0.035, 0.02, 0.055), vec3(0.03, 0.035, 0.12), u_collapse);
-          vec3 warmGlow = vec3(0.45, 0.16, 0.18) * warm * (1.0 - u_collapse * 0.72);
-          vec3 galaxy = vec3(0.018, 0.03, 0.08);
-          galaxy += vec3(0.035, 0.06, 0.18) * smoothstep(0.1, 0.95, uv.y);
-          galaxy += vec3(0.08, 0.035, 0.13) * smoothstep(0.25, 0.85, sin(uv.x * 4.2 + uv.y * 5.0 + u_time * 0.04) * 0.5 + 0.5) * u_collapse * 0.38;
+          float nebula = smoothstep(0.18, 0.85, sin(uv.x * 4.6 + uv.y * 5.8 + u_time * 0.035) * 0.5 + 0.5);
+          vec3 darkTop = mix(vec3(0.072, 0.034, 0.095), vec3(0.024, 0.038, 0.115), u_collapse);
+          vec3 warmGlow = vec3(0.68, 0.22, 0.28) * warm * (1.0 - u_collapse * 0.65);
+          vec3 roseBloom = vec3(0.52, 0.14, 0.24) * warm * warm * (1.0 - u_collapse * 0.8) * 0.7;
+          vec3 galaxy = vec3(0.012, 0.020, 0.068);
+          galaxy += vec3(0.028, 0.066, 0.19) * smoothstep(0.08, 0.98, uv.y);
+          galaxy += vec3(0.12, 0.045, 0.19) * nebula * u_collapse * 0.58;
+          galaxy += vec3(0.055, 0.018, 0.11) * nebula * (1.0 - u_collapse) * 0.35;
 
-          vec3 color = mix(darkTop + warmGlow, galaxy, u_collapse);
-          vec3 waterColor = vec3(0.008, 0.018, 0.055) + vec3(0.025, 0.055, 0.16) * (1.0 - uv.y + wave);
+          vec3 color = mix(darkTop + warmGlow + roseBloom, galaxy, u_collapse);
+          vec3 waterColor = vec3(0.008, 0.018, 0.058)
+            + vec3(0.025, 0.068, 0.21) * (1.0 - uv.y + wave)
+            + vec3(0.22, 0.14, 0.04) * (1.0 - uv.y) * 0.18;
           color = mix(color, waterColor, water * u_collapse);
+          color += vec3(0.85, 0.68, 0.32) * ripple * water * u_collapse * 0.55;
+          float dustLane = smoothstep(0.0, 1.0, sin(uv.x * 7.2 + uv.y * 3.1 + u_time * 0.018) * 0.5 + 0.5) * 0.04;
+          color += vec3(0.6, 0.4, 0.9) * dustLane * u_collapse;
 
           float stars = softStar(uv + vec2(u_time * 0.002, 0.0), 88.0);
           stars += softStar(uv + vec2(0.13, u_time * 0.001), 142.0) * 0.75;
+          stars += softStar(uv + vec2(u_time * -0.001, 0.21), 52.0) * warm * (1.0 - u_collapse * 0.4) * 0.6;
           color += vec3(0.86, 0.91, 1.0) * stars * u_collapse;
+          color += vec3(1.0, 0.62, 0.34) * stars * warm * (1.0 - u_collapse) * 0.95;
 
           float horizon = smoothstep(waterLine + 0.01, waterLine - 0.01, abs(uv.y - waterLine));
           color += vec3(0.25, 0.37, 0.58) * horizon * u_collapse * 0.25;
@@ -1671,6 +1713,7 @@
       let roseParticles = [];
       let glyphStars = [];
       let dust = [];
+      let fireflies = [];
       let ripples = [];
       let startMillis = 0;
       let lastChimeAt = 0;
@@ -1738,6 +1781,7 @@
         roseParticles = buildRoseParticles();
         glyphStars = buildGlyphStars();
         dust = buildDust();
+        fireflies = buildFireflies();
         ripples = [];
       }
 
@@ -1750,7 +1794,21 @@
         bgShader.setUniform("u_resolution", [p.width, p.height]);
         bgShader.setUniform("u_time", t);
         bgShader.setUniform("u_collapse", collapse);
+        setRippleUniforms(t);
         p.quad(-1, -1, 1, -1, 1, 1, -1, 1);
+      }
+
+      function setRippleUniforms(t) {
+        const visibleRipples = ripples
+          .filter((ripple) => t - ripple.born >= 0 && t - ripple.born < 3.4)
+          .slice(-8);
+        for (let i = 0; i < 8; i += 1) {
+          const ripple = visibleRipples[i];
+          const value = ripple
+            ? [ripple.x / p.width, ripple.y / p.height, ripple.born, ripple.strength]
+            : [0, 0, -100, 0];
+          bgShader.setUniform(`u_ripple${i}`, value);
+        }
       }
 
       function drawSceneBuffer(t, collapse) {
@@ -1761,6 +1819,7 @@
         drawUpperAtmosphere(t, collapse);
         drawEnvelope(t, collapse);
         updateRoseParticles(t, collapse);
+        drawWaterSurface(t, collapse);
         updateGlyphStars(t, collapse);
         drawRipples(t, collapse);
         drawBoatAndPaper(t);
@@ -1771,6 +1830,22 @@
         scene.noStroke();
         const glowAlpha = 92 * (1 - collapse);
         drawGlow(p.width * 0.5, p.height * 0.36, p.width * 0.5, [240, 142, 159], glowAlpha);
+        scene.push();
+        scene.blendMode(scene.ADD);
+        fireflies.forEach((item) => {
+          const driftX = Math.sin(t * item.wander + item.phase) * item.drift;
+          const flowX = (item.x + t * item.speed * 22 + driftX) % (p.width + 40);
+          const x = flowX - 20;
+          const y = item.y + Math.sin(t * item.floatSpeed + item.phase * 1.7) * item.float;
+          const twinkle = 0.62 + Math.sin(t * item.twinkle + item.phase) * 0.38;
+          const alpha = item.alpha * twinkle * (1 - collapse * 0.48);
+          drawGlow(x, y, item.size * 22, [255, 175, 100], alpha * 0.32);
+          drawGlow(x, y, item.size * 7, [255, 245, 180], alpha * 0.68);
+          scene.fill(255, 252, 218, alpha);
+          scene.circle(x, y, item.size * 1.5);
+        });
+        scene.blendMode(scene.BLEND);
+        scene.pop();
         for (let i = 0; i < dust.length; i += 1) {
           const item = dust[i];
           const drift = Math.sin(t * item.speed + item.phase) * 12;
@@ -1826,7 +1901,8 @@
         if (burst <= 0) return;
 
         scene.push();
-        scene.blendMode(scene.BLEND);
+        drawMemoryBurstCore(t, burst, dissolve, pull);
+        scene.blendMode(scene.ADD);
         roseParticles.forEach((rose) => {
           const origin = layout.envelope;
           const explosive = easeOutCubic(burst);
@@ -1839,68 +1915,215 @@
           if (alpha <= 1 || size <= 0.5) return;
           drawRoseParticle(galaxyX, galaxyY, size, rose.color, alpha, rose.rotation + t * rose.spin);
           if (rose.index % 7 === 0) {
-            scene.stroke(255, 204, 215, alpha * 0.18);
+            scene.stroke(255, 204, 215, alpha * 0.12);
             scene.line(origin.x, origin.y, galaxyX, galaxyY);
           }
         });
+        scene.blendMode(scene.BLEND);
         scene.pop();
       }
 
-      function updateGlyphStars(t, collapse) {
-        const active = easeInOutCubic(p.constrain((t - 2.7) / 1.25, 0, 1));
-        if (active <= 0) return;
+      function drawMemoryBurstCore(t, burst, dissolve, pull) {
+        const origin = layout.envelope;
+        const flash = Math.sin(p.constrain((t - 0.72) / 0.2, 0, 1) * p.PI);
+        if (flash > 0.01) {
+          scene.push();
+          scene.blendMode(scene.ADD);
+          drawGlow(origin.x, origin.y, p.width * 0.18, [255, 255, 255], 240 * flash);
+          drawGlow(origin.x, origin.y, p.width * 0.08, [255, 245, 220], 180 * flash);
+          scene.blendMode(scene.BLEND);
+          scene.pop();
+        }
 
+        const release = Math.sin(p.constrain(burst, 0, 1) * p.PI) * (1 - dissolve * 0.45) * (1 - pull * 0.5);
+        if (release <= 0.01) return;
         scene.push();
+        scene.blendMode(scene.ADD);
+        drawGlow(origin.x, origin.y, p.width * (0.26 + burst * 0.34), [255, 142, 172], 120 * release);
+        drawGlow(origin.x, origin.y - 18, p.width * (0.16 + burst * 0.18), [255, 220, 175], 86 * release);
+        scene.noFill();
+        for (let ring = 0; ring < 8; ring += 1) {
+          const radius = (24 + burst * p.width * (0.12 + ring * 0.024)) * (1 + ring * 0.07);
+          scene.stroke(255, ring % 2 ? 198 : 232, ring % 2 ? 210 : 184, release * (72 - ring * 6));
+          scene.strokeWeight(Math.max(0.55, 1.05 - ring * 0.05));
+          scene.ellipse(origin.x, origin.y, radius * 1.65, radius * 0.72);
+        }
+        for (let i = 0; i < 32; i += 1) {
+          const angle = (i / 32) * p.TWO_PI + t * 0.34;
+          const inner = 18 + burst * 28;
+          const outer = 70 + burst * p.width * 0.28 + Math.sin(i * 1.7) * 18;
+          scene.stroke(255, 198, 214, release * 30);
+          scene.line(
+            origin.x + Math.cos(angle) * inner,
+            origin.y + Math.sin(angle) * inner * 0.68,
+            origin.x + Math.cos(angle) * outer,
+            origin.y + Math.sin(angle) * outer * 0.68,
+          );
+        }
+        scene.blendMode(scene.BLEND);
+        scene.pop();
+      }
+
+      function drawWaterSurface(t, collapse) {
+        if (collapse < 0.04) return;
+        const calm = 1 - easeInOutCubic(p.constrain((t - 11.4) / 3.2, 0, 1));
+        const surfaceAlpha = 78 * collapse * (0.55 + calm * 0.45);
+        scene.push();
+        scene.noFill();
+        scene.blendMode(scene.ADD);
+        scene.strokeWeight(1);
+        scene.stroke(255, 214, 188, surfaceAlpha * 0.28);
+        scene.line(p.width * 0.06, layout.waterY, p.width * 0.94, layout.waterY);
+
+        for (let row = 0; row < 11; row += 1) {
+          const baseY = layout.waterY + 16 + row * Math.max(12, p.height * 0.025);
+          if (baseY > p.height - 20) break;
+          const depth = row / 10;
+          const alpha = surfaceAlpha * (1 - depth * 0.68);
+          scene.stroke(row % 2 ? 126 : 188, row % 2 ? 184 : 220, 255, alpha * 0.42);
+          scene.beginShape();
+          for (let x = -24; x <= p.width + 24; x += 24) {
+            const wave = Math.sin(x * 0.017 + t * (0.9 - depth * 0.34) + row) * (3.2 + calm * 2.2);
+            const slow = Math.sin(x * 0.006 - t * 0.45 + row * 2.1) * 5.5 * (1 - depth * 0.35);
+            const ripple = rippleSurfaceOffset(x, baseY, t) * collapse;
+            scene.curveVertex(x, baseY + wave + slow + ripple);
+          }
+          scene.endShape();
+        }
+
+        for (let i = 0; i < 46; i += 1) {
+          const x = (i * 83 + t * 14) % p.width;
+          const y = layout.waterY + 18 + ((i * 47) % Math.max(60, p.height * 0.32));
+          const pulse = 0.42 + Math.sin(t * 1.4 + i) * 0.22;
+          scene.fill(174, 214, 255, 22 * collapse * pulse);
+          scene.circle(x, y, 1.2 + (i % 3) * 0.7);
+        }
+        scene.blendMode(scene.BLEND);
+        scene.pop();
+      }
+
+      function rippleSurfaceOffset(x, y, t) {
+        let offset = 0;
+        ripples.forEach((ripple) => {
+          const age = t - ripple.born;
+          if (age < 0 || age > 3.2) return;
+          const radius = age * 74 * ripple.strength;
+          const dx = x - ripple.x;
+          const dy = (y - ripple.y) * 3.1;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          const ring = Math.max(0, 1 - Math.abs(distance - radius) / 22);
+          const fade = 1 - age / 3.2;
+          offset += Math.sin(distance * 0.12 - age * 7.4) * ring * fade * 8 * ripple.strength;
+        });
+        return offset;
+      }
+
+      function updateGlyphStars(t, collapse) {
+        const active = easeInOutCubic(p.constrain((t - 1.85) / 1.15, 0, 1));
+        if (active <= 0) return;
+        const fadeOut = 1 - easeInOutCubic(p.constrain((t - 13.4) / 2.2, 0, 1));
+        const states = [];
+
         glyphStars.forEach((star) => {
           const local = p.constrain((t - star.start) / star.duration, 0, 1);
           if (local <= 0) return;
           const fall = easeInOutCubic(local);
           const sway = Math.sin(t * star.swaySpeed + star.phase) * star.sway * (1 - fall * 0.45);
+          const wordBreath = star.isLetter ? Math.sin((1 - fall) * p.PI) * star.wordLift : 0;
           const x = p.lerp(star.skyX, star.waterX, fall) + sway;
           const y = p.lerp(star.skyY, star.waterY, fall);
-          const alpha = 210 * active * (1 - p.constrain((t - 11.3) / 1.8, 0, 1));
+          const alpha = (star.isLetter ? 232 : 178) * active * fadeOut * star.alphaScale;
           const rotate = star.rotation + t * star.spin;
 
           if (!star.impacted && local >= 1) {
             star.impacted = true;
-            ripples.push({ x, y: layout.waterY, born: t, strength: star.isLetter ? 1.0 : 0.62 });
-            if (t - lastChimeAt > 0.08 && chimeCount < 42) {
+            ripples.push({
+              x,
+              y: star.impactY || layout.waterY,
+              born: t,
+              strength: star.isLetter ? 1.06 : 0.62,
+            });
+            if (t - lastChimeAt > 0.07 && chimeCount < 64) {
               lastChimeAt = t;
               chimeCount += 1;
               playWaterChime(star.isLetter ? 1 : 0.65, p.map(x, 0, p.width, -0.65, 0.65));
             }
           }
 
-          if (y < layout.waterY + 8) {
-            drawStarOrLetter(x, y, star, alpha, rotate);
-          }
-          drawReflection(x, y, star, alpha * 0.42, rotate, t);
+          states.push({ star, x, y: y - wordBreath, alpha, rotate, fall });
         });
+
+        scene.push();
+        drawWordConnections(states);
+        states.forEach((state) => {
+          if (state.y < layout.waterY + 10) {
+            drawStarOrLetter(state.x, state.y, state.star, state.alpha, state.rotate);
+          }
+          drawReflection(state.x, state.y, state.star, state.alpha * 0.72, state.rotate, t);
+        });
+        scene.pop();
+      }
+
+      function drawWordConnections(states) {
+        const lastByWord = new Map();
+        scene.push();
+        scene.blendMode(scene.ADD);
+        scene.strokeWeight(0.75);
+        states
+          .filter((state) => state.star.isLetter && state.star.wordId)
+          .sort((a, b) => a.star.order - b.star.order)
+          .forEach((state) => {
+            const previous = lastByWord.get(state.star.wordId);
+            if (
+              previous &&
+              state.star.letterInWord === previous.star.letterInWord + 1 &&
+              state.y < layout.waterY + 8 &&
+              previous.y < layout.waterY + 8
+            ) {
+              const distance = Math.hypot(state.x - previous.x, state.y - previous.y);
+              if (distance < 120) {
+                const alpha = Math.min(state.alpha, previous.alpha) * 0.18 * (1 - Math.max(state.fall, previous.fall) * 0.42);
+                scene.stroke(255, 203, 150, alpha);
+                scene.line(previous.x, previous.y, state.x, state.y);
+              }
+            }
+            lastByWord.set(state.star.wordId, state);
+          });
+        scene.blendMode(scene.BLEND);
         scene.pop();
       }
 
       function drawRipples(t, collapse) {
-        if (collapse < 0.35) return;
+        if (collapse < 0.05) return;
         scene.push();
         scene.noFill();
-        ripples = ripples.filter((ripple) => t - ripple.born < 2.4);
+        scene.blendMode(scene.ADD);
+        ripples = ripples.filter((ripple) => t - ripple.born < 3.4);
         ripples.forEach((ripple) => {
           const age = t - ripple.born;
-          const radius = age * 46 * ripple.strength;
-          const alpha = 115 * (1 - age / 2.4) * collapse;
-          scene.stroke(180, 215, 255, alpha);
-          scene.strokeWeight(1);
-          scene.ellipse(ripple.x, ripple.y, radius * 2.4, radius * 0.52);
-          scene.stroke(255, 220, 235, alpha * 0.42);
-          scene.ellipse(ripple.x, ripple.y, radius * 1.3, radius * 0.28);
+          const fade = Math.max(0, 1 - age / 3.4);
+          const radius = age * 74 * ripple.strength;
+          const alpha = 138 * fade * collapse;
+          drawGlow(ripple.x, ripple.y, radius * 0.92, [128, 187, 255], alpha * 0.12);
+          for (let ring = 0; ring < 3; ring += 1) {
+            const r = radius * (1 + ring * 0.34);
+            const ringAlpha = alpha * (1 - ring * 0.27);
+            scene.stroke(186, 224, 255, ringAlpha);
+            scene.strokeWeight(Math.max(0.55, 1.35 - ring * 0.28));
+            scene.ellipse(ripple.x, ripple.y, r * 2.55, r * 0.5);
+          }
+          scene.stroke(255, 216, 232, alpha * 0.46);
+          scene.strokeWeight(0.8);
+          scene.arc(ripple.x, ripple.y, radius * 1.8, radius * 0.36, p.PI * 0.08, p.PI * 0.9);
         });
+        scene.blendMode(scene.BLEND);
         scene.pop();
       }
 
       function drawBoatAndPaper(t) {
-        const appear = easeOutCubic(p.constrain((t - 8.1) / 1.2, 0, 1));
+        const appear = easeOutCubic(p.constrain((t - 9.4) / 1.4, 0, 1));
         if (appear <= 0) return;
-        const paper = easeInOutCubic(p.constrain((t - 10.1) / 2.2, 0, 1));
+        const paper = easeInOutCubic(p.constrain((t - 11.2) / 2.6, 0, 1));
         const cx = p.width * 0.5 + Math.sin(t * 0.34) * 12 * (1 - paper);
         const cy = layout.waterY + p.height * 0.13 + Math.sin(t * 0.7) * 3;
         const boatW = Math.min(144, p.width * 0.28);
@@ -1958,15 +2181,29 @@
         scene.translate(x, y);
         scene.rotate(rotation);
         scene.blendMode(scene.ADD);
-        drawGlow(0, 0, star.size * 7, star.isLetter ? [255, 237, 190] : [176, 208, 255], alpha * 0.55);
-        scene.fill(255, 248, 218, alpha);
-        scene.noStroke();
         if (star.isLetter) {
+          drawGlow(0, 0, star.size * 10, [255, 228, 177], alpha * 0.55);
+          scene.fill(255, 252, 230, alpha);
+          scene.noStroke();
           scene.textFont("Georgia");
           scene.textAlign(scene.CENTER, scene.CENTER);
-          scene.textSize(star.size * 2.6);
+          scene.textSize(star.size * 2.8);
           scene.text(star.char, 0, 0);
+          const seed = star.char.charCodeAt(0);
+          for (let i = 0; i < 5; i += 1) {
+            const angle = (seed * 0.7 + i / 5) * Math.PI * 2 + rotation * 0.6;
+            const dist = star.size * (0.9 + (i % 3) * 0.4);
+            const px = Math.cos(angle) * dist;
+            const py = Math.sin(angle) * dist;
+            const particleAlpha = alpha * (0.28 + (i % 2) * 0.22);
+            drawGlow(px, py, star.size * 2.2, [255, 200, 140], particleAlpha * 0.7);
+            scene.fill(255, 230, 180, particleAlpha);
+            scene.circle(px, py, star.size * 0.55);
+          }
         } else {
+          drawGlow(0, 0, star.size * 7, [176, 208, 255], alpha * 0.56);
+          scene.fill(255, 248, 218, alpha);
+          scene.noStroke();
           drawTinyStar(0, 0, star.size * 0.45, star.size * 1.3, 5);
         }
         scene.blendMode(scene.BLEND);
@@ -1974,30 +2211,38 @@
       }
 
       function drawReflection(x, y, star, alpha, rotation, t) {
-        if (y < layout.waterY - 26) return;
-        const reflectedY = layout.waterY + Math.abs(y - layout.waterY) * 0.55 + 8;
+        if (y < layout.waterY - 36) return;
+        const depth = Math.abs(y - layout.waterY);
+        const reflectedY = layout.waterY + depth * 0.65 + 12;
+        if (reflectedY > p.height - 10) return;
+
         let rippleBend = 0;
         ripples.forEach((ripple) => {
           const age = t - ripple.born;
-          const reach = 58 + age * 52;
-          const influence = Math.max(0, 1 - Math.abs(x - ripple.x) / reach) * Math.max(0, 1 - age / 2.4);
-          rippleBend += Math.sin(Math.abs(x - ripple.x) * 0.11 - age * 5.2) * influence * 18 * ripple.strength;
+          const reach = 80 + age * 60;
+          const influence = Math.max(0, 1 - Math.abs(x - ripple.x) / reach) * Math.max(0, 1 - age / 3.4);
+          rippleBend += Math.sin(Math.abs(x - ripple.x) * 0.1 - age * 6.2) * influence * 28 * ripple.strength;
         });
-        const rippleOffset = Math.sin((x * 0.024) + t * 2.2 + star.phase) * 8 + rippleBend;
+        const shimmerX = Math.sin(x * 0.031 + t * 1.8 + star.phase) * 14 + Math.sin(x * 0.017 - t * 2.4) * 7;
+
         scene.push();
-        scene.translate(x + rippleOffset, reflectedY);
-        scene.scale(1, -0.42);
-        scene.rotate(-rotation * 0.4);
-        scene.fill(180, 210, 255, alpha);
+        scene.translate(x + rippleBend + shimmerX, reflectedY);
+        scene.scale(1.18, -0.38);
+        scene.rotate(-rotation * 0.3);
+        scene.blendMode(scene.ADD);
+        const reflectionColor = star.isLetter ? [255, 190, 130] : [140, 190, 255];
+        drawGlow(0, 0, star.size * (star.isLetter ? 9 : 6), reflectionColor, alpha * 0.65);
+        scene.fill(reflectionColor[0], reflectionColor[1], reflectionColor[2], alpha * 0.72);
         scene.noStroke();
         if (star.isLetter) {
           scene.textFont("Georgia");
           scene.textAlign(scene.CENTER, scene.CENTER);
-          scene.textSize(star.size * 2.3);
+          scene.textSize(star.size * 2.5);
           scene.text(star.char, 0, 0);
         } else {
-          scene.ellipse(0, 0, star.size * 1.5, star.size * 0.8);
+          scene.ellipse(0, 0, star.size * 1.8, star.size * 0.9);
         }
+        scene.blendMode(scene.BLEND);
         scene.pop();
       }
 
@@ -2025,27 +2270,75 @@
           paperLines.push(...wrapWords(measure, paragraph.trim(), paperWidth));
         });
 
-        const glyphSource = [...`${plaintext.title || ""} ${plaintext.message || ""}`].filter((char) => char.trim());
-        const cappedGlyphs = glyphSource.slice(0, p.width < 680 ? 180 : 340);
+        const glyphs = buildGlyphConstellations(measure, paperLines, paperWidth, paperSize);
         measure.remove();
-        return { waterY, envelope, paperLines, paperSize, paperLeading, glyphs: cappedGlyphs };
+        return { waterY, envelope, paperLines, paperSize, paperLeading, glyphs };
+      }
+
+      function buildGlyphConstellations(measure, paperLines, paperWidth) {
+        const glyphLimit = p.width < 680 ? 260 : 520;
+        const glyphs = [];
+        let order = 0;
+        let wordOrder = 0;
+
+        paperLines.forEach((line, lineIndex) => {
+          if (!line.trim() || glyphs.length >= glyphLimit) {
+            wordOrder += 1;
+            return;
+          }
+
+          const spans = [];
+          line.replace(/\S+/g, (word, offset) => {
+            spans.push({ start: offset, end: offset + word.length, index: spans.length });
+            return word;
+          });
+
+          const rawWidth = Math.max(1, measure.textWidth(line));
+          const scale = Math.min(1, Math.min(paperWidth, p.width * 0.76) / rawWidth);
+          const startX = p.width * 0.5 - (rawWidth * scale) / 2;
+          let cursor = 0;
+
+          for (let charIndex = 0; charIndex < line.length && glyphs.length < glyphLimit; charIndex += 1) {
+            const char = line.charAt(charIndex);
+            const charWidth = measure.textWidth(char || " ");
+            const span = spans.find((entry) => charIndex >= entry.start && charIndex < entry.end);
+            if (char.trim() && span) {
+              glyphs.push({
+                char,
+                lineIndex,
+                wordId: `${lineIndex}-${span.index}`,
+                wordOrder: wordOrder + span.index,
+                letterInWord: charIndex - span.start,
+                wordLength: span.end - span.start,
+                order,
+                sceneX: startX + (cursor + charWidth * 0.5) * scale,
+              });
+              order += 1;
+            }
+            cursor += charWidth;
+          }
+
+          wordOrder += Math.max(1, spans.length);
+        });
+
+        return glyphs;
       }
 
       function buildRoseParticles() {
-        const count = p.width < 680 ? 360 : 760;
+        const count = p.width < 680 ? 620 : 1180;
         const list = [];
         for (let i = 0; i < count; i += 1) {
           const angle = p.random(-p.PI * 0.96, -p.PI * 0.04);
-          const power = p.random(70, p.width * 0.45);
+          const power = p.random(84, p.width * 0.52);
           list.push({
             index: i,
             vx: Math.cos(angle) * power,
             vy: Math.sin(angle) * power * p.random(0.65, 1.22),
-            gravity: p.random(40, 180),
+            gravity: p.random(34, 210),
             sinkX: p.random(p.width * 0.08, p.width * 0.92),
             sinkDepth: p.random(-30, p.height * 0.28),
-            size: p.random(2.2, 6.8),
-            alpha: p.random(28, 92),
+            size: p.random(1.8, 7.4),
+            alpha: p.random(20, 86),
             rotation: p.random(p.TWO_PI),
             spin: p.random(-1.2, 1.2),
             wobble: p.random(1.2, 3.4),
@@ -2057,26 +2350,63 @@
       }
 
       function buildGlyphStars() {
-        const glyphs = layout.glyphs.length ? layout.glyphs : ["*"];
-        const count = Math.max(glyphs.length, p.width < 680 ? 130 : 230);
         const list = [];
-        for (let i = 0; i < count; i += 1) {
-          const isLetter = i < glyphs.length && i % 2 !== 0;
+        const glyphs = layout.glyphs;
+        const totalLetters = Math.max(1, glyphs.length - 1);
+        glyphs.forEach((glyph) => {
+          const sequence = glyph.order / totalLetters;
+          const wordDrift = Math.sin(glyph.wordOrder * 1.47) * p.width * 0.035;
+          const skyX = p.constrain(glyph.sceneX + wordDrift + p.random(-14, 14), p.width * 0.06, p.width * 0.94);
+          const waterX = p.constrain(glyph.sceneX + p.random(-9, 9), p.width * 0.08, p.width * 0.92);
+          const impactY = layout.waterY + p.random(-12, 18);
           list.push({
-            char: isLetter ? glyphs[i % glyphs.length] : "*",
-            isLetter,
-            skyX: p.random(p.width * 0.12, p.width * 0.88),
-            skyY: p.random(-120, p.height * 0.22),
-            waterX: p.random(p.width * 0.12, p.width * 0.88),
-            waterY: layout.waterY + p.random(-18, 24),
-            size: isLetter ? p.random(7, 12) : p.random(2.0, 4.4),
-            start: 2.8 + i * (p.width < 680 ? 0.028 : 0.018) + p.random(0, 1.2),
-            duration: p.random(3.2, 5.6),
+            char: glyph.char,
+            isLetter: true,
+            wordId: glyph.wordId,
+            wordOrder: glyph.wordOrder,
+            letterInWord: glyph.letterInWord,
+            order: glyph.order,
+            skyX,
+            skyY: p.random(-170, -26) + (glyph.lineIndex % 5) * 18,
+            waterX,
+            waterY: impactY + p.random(-5, 9),
+            impactY,
+            size: p.random(8.2, p.width < 680 ? 12.6 : 14.2),
+            start: 1.9 + sequence * 4.8 + glyph.letterInWord * 0.012 + p.random(0, 0.18),
+            duration: p.random(4.5, 6.9),
             phase: p.random(p.TWO_PI),
-            sway: p.random(12, 42),
-            swaySpeed: p.random(0.38, 0.82),
-            spin: p.random(-0.28, 0.28),
+            sway: p.random(8, 28),
+            swaySpeed: p.random(0.24, 0.54),
+            spin: p.random(-0.18, 0.18),
             rotation: p.random(-0.8, 0.8),
+            wordLift: p.random(5, 16),
+            alphaScale: p.random(0.82, 1.0),
+            impacted: false,
+          });
+        });
+
+        const pureCount = p.width < 680 ? 95 : 170;
+        for (let i = 0; i < pureCount; i += 1) {
+          const impactY = layout.waterY + p.random(-16, 22);
+          list.push({
+            char: "*",
+            isLetter: false,
+            order: glyphs.length + i,
+            skyX: p.random(p.width * 0.08, p.width * 0.92),
+            skyY: p.random(-190, p.height * 0.18),
+            waterX: p.random(p.width * 0.1, p.width * 0.9),
+            waterY: impactY + p.random(-6, 10),
+            impactY,
+            size: p.random(2.0, 4.8),
+            start: p.random(1.95, 8.2),
+            duration: p.random(4.2, 7.2),
+            phase: p.random(p.TWO_PI),
+            sway: p.random(12, 46),
+            swaySpeed: p.random(0.28, 0.72),
+            spin: p.random(-0.34, 0.34),
+            rotation: p.random(-0.8, 0.8),
+            wordLift: 0,
+            alphaScale: p.random(0.58, 0.94),
             impacted: false,
           });
         }
@@ -2093,6 +2423,27 @@
             alpha: p.random(12, 45),
             phase: p.random(p.TWO_PI),
             speed: p.random(0.35, 1.1),
+          });
+        }
+        return list;
+      }
+
+      function buildFireflies() {
+        const list = [];
+        const count = p.width < 680 ? 46 : 78;
+        for (let i = 0; i < count; i += 1) {
+          list.push({
+            x: p.random(-20, p.width + 20),
+            y: p.random(p.height * 0.08, layout.waterY - 22),
+            size: p.random(0.9, 2.5),
+            alpha: p.random(18, 62),
+            phase: p.random(p.TWO_PI),
+            speed: p.random(0.08, 0.42),
+            drift: p.random(12, 48),
+            float: p.random(5, 18),
+            floatSpeed: p.random(0.18, 0.46),
+            twinkle: p.random(1.2, 2.8),
+            wander: p.random(0.24, 0.68),
           });
         }
         return list;

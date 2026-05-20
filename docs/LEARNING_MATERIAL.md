@@ -1,18 +1,18 @@
-# Interactive Generative Letter App
+# Letters in Motion - Learning Material
 
-## 1. Purpose
+## Overview
 
-This project is a reusable person-to-person digital letter app. A writer creates their own message, seals it with an access key, stores the encrypted envelope in their local gallery, and shares the encrypted link with the recipient. The app does not generate or invent the emotional letter content. The animation uses the writer's typed words after the recipient unlocks the envelope.
+Letters in Motion is a browser-based app for writing, sealing, sharing, and opening private digital letters. The experience is intentionally personal: the app never invents the message. It uses the writer's own words as the source material for the final generative animation.
 
-The app has three phases:
+The project has three user-facing phases:
 
-1. Write: collect the recipient, title, access key, key prompt, and message.
-2. Gallery: show the writer's own encrypted letters as hanging envelopes.
-3. Galaxy River Letter: unlock the envelope, release a brief rose-memory burst, collapse into cosmic water, turn the user's letters into falling star-glyphs, and reveal the readable letter at the end.
+1. Write a letter with a recipient, title, access key, optional key prompt, and message.
+2. Store the sealed letter in a local encrypted gallery.
+3. Unlock the letter into a cinematic Galaxy River reveal built from the decrypted text.
 
-Plaintext is not saved to browser storage. Saved and shared letters contain encrypted data only.
+Plaintext is kept out of browser storage. The saved gallery and shared links contain encrypted records only.
 
-## 2. Project Structure
+## Project Structure
 
 ```text
 Write_Letters/
@@ -24,15 +24,15 @@ Write_Letters/
     LEARNING_MATERIAL.md
 ```
 
-`index.html` defines the application sections and loads `p5.js`, `Matter.js`, the stylesheet, and the app logic.
+`index.html` defines the compose, gallery, unlock, and river sections. It loads p5.js, Matter.js, the stylesheet, and the application script.
 
-`src/styles.css` controls the paper interface, layout, keyboard, modal, gallery, reading panel, and final reveal transition.
+`src/styles.css` controls the responsive layout, paper forms, gallery panels, modal states, canvas containers, and final letter reveal.
 
-`src/app.js` contains state management, encryption, local storage, sharing, Web Audio, the Matter.js gallery, and the p5.js WEBGL cinematic reveal.
+`src/app.js` contains the full application logic: state management, encryption, local storage, sharing, audio, Matter.js physics, and the p5.js Galaxy River animation.
 
-## 3. Data And Privacy Model
+## Privacy Model
 
-The plaintext letter exists as:
+Each letter is converted into this plaintext object before encryption:
 
 ```js
 {
@@ -43,145 +43,156 @@ The plaintext letter exists as:
 }
 ```
 
-Before saving:
+The save flow is:
 
-1. The user enters an access key.
-2. PBKDF2 derives an AES key from the access key and a random salt.
-3. AES-GCM encrypts the plaintext letter.
-4. Only the encrypted record is saved to `localStorage`.
+1. The writer enters an access key.
+2. The browser derives an AES key using PBKDF2 and a random salt.
+3. The plaintext object is encrypted with AES-GCM.
+4. Only the encrypted payload, salt, IV, key prompt, and metadata are stored.
 
-The access key is not stored. Shared letters place the encrypted record in the URL fragment after `#open=...`, and the recipient still needs the access key to decrypt it.
+The access key is not stored. A shared link places the encrypted record in the URL fragment after `#open=...`; the recipient still needs the access key to decrypt it.
 
-Important limitation: this is client-side privacy, not account security. Anyone with both the encrypted link and the correct key can open the letter. A production product should add accounts, server-side access controls, rate limiting, revocation, and audited key handling.
+This is client-side privacy, not complete account security. A production service should add user accounts, server-side authorization, revocation, rate limiting, audit logging, and a reviewed key-management design.
 
-## 4. Write Phase
+## Compose Phase
 
-The write phase uses native HTML inputs for accessibility and reliability. The message field currently allows up to 5,200 characters.
+The compose view favors reliable native controls:
 
-Typing feedback is procedural:
+- short text inputs collect recipient, title, access key, and key prompt;
+- the message textarea accepts up to 5,200 characters;
+- a live paper preview mirrors the writer's content;
+- floating glyphs and soft Web Audio clicks respond to typing.
 
-- short filtered noise creates a soft key click;
-- occasional sine tones create a crystalline shimmer;
-- floating glyphs visually respond to typing.
+The app does not call an AI service or a paid media API. All visual and audio feedback is generated in the browser.
 
-No paid audio API or asset service is used.
+## Gallery Phase
 
-## 5. Gallery Phase
+The gallery uses Matter.js to make sealed letters feel physical:
 
-Matter.js provides the hanging-envelope gallery:
+- each letter is represented as a hanging envelope body;
+- constraints attach envelopes to anchor points;
+- gravity, damping, and collision settings provide weight;
+- mouse constraints let the user drag and select envelopes.
 
-- each encrypted letter is a dynamic rectangle;
-- a constraint connects each envelope to an anchor point;
-- gravity, damping, and collisions make the gallery feel physical;
-- mouse constraints let users drag and open envelopes.
+The gallery is a local vault. It is built from encrypted records stored in `localStorage`, and selecting an envelope opens the unlock modal.
 
-This preserves the person-to-person mechanism: the gallery is built from the writer's own sealed letters.
+## Galaxy River Phase
 
-## 6. Galaxy River Letter Phase
+After a correct key, the app starts the p5.js Galaxy River sketch. The sequence is designed as a short emotional arc:
 
-The unlock scene is a cinematic p5.js WEBGL stage. It is designed around this emotional sequence:
+1. A sealed envelope floats in warm darkness.
+2. A bright rose-memory burst opens the scene.
+3. The atmosphere collapses into a cold galaxy river.
+4. The user's words become falling star-glyphs.
+5. Star-glyphs hit the water, trigger chimes, and create concentric ripples.
+6. Reflections stretch and shimmer across the water surface.
+7. A paper boat appears and opens into a readable letter.
+8. The side reading panel fades in after the cinematic reveal.
 
-1. Warm darkness and a sealed floating envelope.
-2. The envelope opens after the correct key.
-3. A brief burst of soft pink rose particles explodes outward like compressed memories.
-4. The warm bloom dissolves and collapses downward into deep blue cosmic water.
-5. The writer's typed characters become falling star-glyphs.
-6. Star-glyphs hit the water, create ripples, bend reflections, and trigger delicate chimes.
-7. Motion slows into silence.
-8. A small white boat appears on the water and transforms into paper.
-9. The letter becomes fully readable at the end.
+The readable message is deliberately delayed. During the animation, the text is treated as living material rather than static UI copy.
 
-The side reading panel stays hidden during the cinematic reveal and fades in only after the final paper moment, so early typography behaves as living motion instead of static UI text.
+## Text as Motion
 
-## 7. Text As Living Particles
-
-The reveal does not use a sample letter. It reads characters from the decrypted user message:
+The river sketch builds a layout from the decrypted recipient, title, and message. It wraps those lines to fit the final paper, then converts each visible character into a glyph record:
 
 ```js
-const glyphSource = [...`${plaintext.title || ""} ${plaintext.message || ""}`]
-  .filter((char) => char.trim());
+{
+  char,
+  lineIndex,
+  wordId,
+  wordOrder,
+  letterInWord,
+  order,
+  sceneX
+}
 ```
 
-Those characters become `glyphStars`. Some falling stars draw the actual letters; others draw pure star shapes. Each glyph has:
+Those records become falling `glyphStars`. Each one receives a sky position, a water impact position, duration, sway, spin, alpha scale, and impact state. Sequential letters from the same word can draw fine connection lines, echoing generative typography sketches where language moves between readable order and abstract structure.
 
-- sky start position;
-- water impact position;
-- fall duration;
-- sway and spin;
-- reflected position;
-- impact state for ripple and sound triggering.
+## River Effect Details
 
-The early scene prioritizes emotional motion. Full readability is intentionally delayed until the final boat-to-paper transformation and the reading panel fade-in.
+The current river implementation follows the project guide's priority fixes:
 
-## 8. Water And Reflections
+- the shader uses a stronger warm-to-cold color split;
+- nebula color and a soft dust lane make the background less flat;
+- water ripples use four slower shader rings instead of two fast rings;
+- canvas ripples become visible early in the collapse;
+- letter glyphs render with orbiting micro-stars;
+- reflections use warm letter colors, cool star colors, horizontal shimmer, and wider scaling;
+- fireflies have larger additive halos;
+- the rose-memory burst has an early white flash and denser additive rings;
+- star timing begins during the collapse instead of after it.
 
-The WEBGL canvas uses a shader for the galaxy and water atmosphere:
+The result should feel less like a static glowing-letter scene and more like a physical river where the user's words become light, water, sound, and reflection.
 
-- upper warmth fades into darkness;
-- the lower half becomes indigo cosmic water;
-- procedural stars appear in the distance;
-- moving wave terms create subtle water motion.
+## Rendering Pipeline
 
-Foreground particles are rendered into a transparent p5 graphics buffer and composited over the WEBGL shader. Water impacts create ripple objects. Reflections are mirrored and displaced by both soft wave motion and nearby ripple influence, so falling letters appear to bend when they touch the water.
+The Galaxy River sketch uses two layers:
 
-## 9. Sound Design
+1. A WEBGL shader draws the atmospheric background, galaxy, stars, water color, and shader-side ripple light.
+2. A transparent p5 graphics layer draws envelopes, rose particles, fireflies, glyph stars, ripples, reflections, boat, and paper text.
 
-The audio is generated with the Web Audio API:
+The transparent layer is composited above the shader. This keeps the background efficient while allowing detailed 2D drawing for letter particles and foreground effects.
 
-- typing: quiet filtered clicks and occasional shimmer tones;
-- unlock: fragile bell cascade and low ambient drone;
-- water impacts: small glass-like chimes, throttled so the scene stays restrained.
+## Sound Design
 
-The design avoids cinematic booms. The sound should feel fragile, quiet, deep, and luminous.
+The sound system uses the Web Audio API:
 
-## 10. Free Technical Stack
+- typing produces quiet filtered clicks and occasional shimmer tones;
+- unlocking starts a soft bell cascade and ambient bloom;
+- water impacts trigger small glass-like chimes;
+- impact sounds are throttled so dense glyph falls stay gentle.
 
-The project uses free browser-native and open-source tools:
+The sound direction is restrained: fragile, luminous, and close to the letter rather than loud or cinematic.
+
+## Technical Stack
+
+The project runs as a static browser app using free web technologies:
 
 - HTML and CSS;
-- p5.js;
-- Matter.js;
-- Web Crypto API;
-- Web Audio API;
-- browser `localStorage`.
+- p5.js for generative drawing and shaders;
+- Matter.js for the gallery physics;
+- Web Crypto API for encryption;
+- Web Audio API for procedural sound;
+- browser `localStorage` for the encrypted vault.
 
-No paid API is required for the current version.
+No backend or paid API is required for the current version.
 
-## 11. Future Theme System
+## Local Development
 
-A later version can add user-defined templates without paid AI APIs by using structured choices and keyword matching:
+Run the app from the project root with a simple static server:
 
-```js
-const themes = {
-  birthday: {
-    palette: ["#ffd166", "#ef476f", "#ffffff"],
-    motion: "bright-burst",
-    sound: "clear-chime"
-  },
-  farewell: {
-    palette: ["#d8dee9", "#8f9aa7", "#ffffff"],
-    motion: "slow-river",
-    sound: "soft-bell"
-  },
-  childhoodFriend: {
-    palette: ["#f7c59f", "#70d6ff", "#ffffff"],
-    motion: "playful-orbit",
-    sound: "music-box"
-  }
-};
+```powershell
+python -m http.server 4173
 ```
 
-Users can choose relationship, occasion, mood, and intensity. Natural-language descriptions can be interpreted locally with keyword rules before any AI API is considered.
+Then open:
 
-## 12. Build Workflow
+```text
+http://localhost:4173/
+```
 
-1. Build the HTML structure for writing, gallery, and reveal.
-2. Use CSS for paper, layout, accessibility, and final panel transitions.
-3. Encrypt the user's letter with Web Crypto before saving.
-4. Use Matter.js for the writer's physical envelope gallery.
-5. Start a p5.js WEBGL canvas after successful unlock.
-6. Draw the galaxy and water atmosphere with a shader.
-7. Render particles, glyphs, ripples, reflections, boat, and paper into a transparent graphics buffer.
-8. Composite the buffer over the shader.
-9. Trigger Web Audio chimes from unlock and water impacts.
-10. Reveal the stable readable message only at the final stage.
+Using `localhost` is preferable to opening the HTML file directly because browser cryptography and sharing behavior are most reliable in a local secure-context equivalent.
+
+## Validation Checklist
+
+Use this checklist after changing the project:
+
+1. Load the compose view and confirm the form, preview, keyboard, and typing feedback work.
+2. Seal a letter and confirm only encrypted data is saved.
+3. Open the gallery and confirm envelopes render, move, and can be selected.
+4. Unlock a letter with the correct key and confirm the river animation starts.
+5. Watch for the guide-aligned effects: bright burst, warm-to-cold collapse, falling glyphs, early ripples, stronger reflections, firefly halos, chimes, boat, and final readable paper.
+6. Copy a secure link and confirm the encrypted `#open=` flow can be opened and decrypted with the access key.
+
+## Future Improvements
+
+The next useful additions would be:
+
+- theme presets for different occasions and relationships;
+- optional local keyword rules that map message tone to color, motion, and sound settings;
+- exportable keepsake images or videos;
+- accessibility controls for reduced motion and reduced audio;
+- account-backed storage for production use.
+
+Manim is not a good fit for the core experience because this app depends on live user text, unlock timing, browser audio, and interactive rendering. It would only be useful if the goal changed from personalized interactive letters to pre-rendered videos.
