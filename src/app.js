@@ -168,6 +168,9 @@
       destroyRiverSketch();
       renderAll();
       requestAnimationFrame(initGallerySketch);
+      window.setTimeout(() => {
+        if (!el.galleryCanvas.querySelector("canvas")) initGallerySketch();
+      }, 120);
     }
 
     if (viewName === "compose") {
@@ -825,38 +828,27 @@
 
   function createGallerySketch(records) {
     return new window.p5((p) => {
-      const {
-        Engine,
-        World,
-        Bodies,
-        Constraint,
-        Mouse,
-        MouseConstraint,
-        Query,
-      } = window.Matter;
       let canvas;
-      let engine;
-      let world;
-      let mouseConstraint;
-      let letterItems = [];
-      let stringItems = [];
+      let papers = [];
+      let hoveredId = null;
       let pressed = null;
 
       p.setup = () => {
-        p.pixelDensity(Math.min(2, window.devicePixelRatio || 1));
+        p.pixelDensity(1);
         canvas = p.createCanvas(el.galleryCanvas.clientWidth, el.galleryCanvas.clientHeight);
         canvas.parent(el.galleryCanvas);
         p.textFont("Georgia");
-        buildWorld();
+        rebuildLayout();
       };
 
       p.draw = () => {
-        p.background(186, 202, 196);
-        drawPaperTexture();
-        Engine.update(engine, 1000 / 60);
+        hoveredId = hitTest(p.mouseX, p.mouseY)?.record.id || null;
+        if (canvas?.elt) canvas.elt.style.cursor = hoveredId ? "pointer" : "default";
+        drawWashBackground();
+        drawFaintWriting();
+        drawThreads();
+        drawPaperCluster();
         drawFlower();
-        drawStrings();
-        drawLetters();
         drawInstruction();
       };
 
@@ -864,195 +856,258 @@
         const width = Math.max(320, el.galleryCanvas.clientWidth);
         const height = Math.max(420, el.galleryCanvas.clientHeight);
         p.resizeCanvas(width, height);
-        buildWorld();
+        rebuildLayout();
       };
 
       p.mousePressed = () => {
-        const hit = Query.point(
-          letterItems.map((item) => item.body),
-          { x: p.mouseX, y: p.mouseY },
-        )[0];
-        if (!hit) return;
-        const item = letterItems.find((entry) => entry.body === hit);
+        const item = hitTest(p.mouseX, p.mouseY);
         if (!item) return;
-        pressed = { id: item.record.id, x: p.mouseX, y: p.mouseY, time: p.millis() };
+        pressed = { id: item.record.id, x: p.mouseX, y: p.mouseY };
         selectRecord(item.record.id);
       };
 
       p.mouseReleased = () => {
         if (!pressed) return;
+        const item = hitTest(p.mouseX, p.mouseY);
         const distance = p.dist(pressed.x, pressed.y, p.mouseX, p.mouseY);
-        const elapsed = p.millis() - pressed.time;
-        const record = records.find((item) => item.id === pressed.id);
+        const record = item && item.record.id === pressed.id ? item.record : null;
         pressed = null;
-        if (record && distance < 10 && elapsed < 380) requestOpenRecord(record);
+        if (record && distance < 12) requestOpenRecord(record);
       };
 
-      p.cleanup = () => {
-        if (world) World.clear(world, false);
-        if (engine) Engine.clear(engine);
-      };
+      p.cleanup = () => {};
 
-      function buildWorld() {
-        if (world) World.clear(world, false);
-        if (engine) Engine.clear(engine);
-        engine = Engine.create();
-        world = engine.world;
-        engine.gravity.y = 0.62;
-        letterItems = [];
-        stringItems = [];
-
-        const walls = [
-          Bodies.rectangle(p.width / 2, p.height + 28, p.width + 80, 54, { isStatic: true }),
-          Bodies.rectangle(-28, p.height / 2, 54, p.height, { isStatic: true }),
-          Bodies.rectangle(p.width + 28, p.height / 2, 54, p.height, { isStatic: true }),
-        ];
-        World.add(world, walls);
-
-        records.forEach((record, index) => {
-          const spread = records.length === 1 ? 0.5 : index / (records.length - 1);
-          const anchorX = p.lerp(p.width * 0.17, p.width * 0.83, spread);
-          const anchorY = 86 + Math.sin(index * 1.7) * 18;
-          const width = 118;
-          const height = 74;
-          const body = Bodies.rectangle(
-            anchorX + p.random(-26, 26),
-            230 + (index % 4) * 24,
-            width,
-            height,
-            {
-              chamfer: { radius: 6 },
-              frictionAir: 0.035,
-              restitution: 0.22,
-              density: 0.002,
-            },
+      function rebuildLayout() {
+        const count = records.length;
+        const baseW = p.constrain(p.width * 0.13, 82, 128);
+        const baseH = baseW * 1.32;
+        const columns = p.constrain(Math.ceil(Math.sqrt(count + 1)), 2, p.width < 680 ? 3 : 5);
+        const xStep = baseW * 0.78;
+        const yStep = baseH * 0.38;
+        const clusterTop = p.height * (p.width < 680 ? 0.43 : 0.48);
+        papers = records.map((record, index) => {
+          const row = Math.floor(index / columns);
+          const col = index % columns;
+          const centeredCol = col - (Math.min(columns, count) - 1) / 2;
+          const seed = hashString(`${record.id}-${index}`);
+          const jitterX = (seeded(seed, 1) - 0.5) * baseW * 0.42;
+          const jitterY = (seeded(seed, 2) - 0.5) * baseH * 0.24;
+          const x = p.constrain(
+            p.width * 0.5 + centeredCol * xStep + jitterX + Math.sin(row * 1.7) * baseW * 0.26,
+            baseW * 0.65,
+            p.width - baseW * 0.65,
           );
-          body.letterId = record.id;
-
-          const string = Constraint.create({
-            pointA: { x: anchorX, y: anchorY },
-            bodyB: body,
-            pointB: { x: 0, y: -height / 2 },
-            length: 150 + (index % 5) * 18,
-            stiffness: 0.006,
-            damping: 0.08,
-          });
-
-          letterItems.push({ body, record, width, height, anchorX, anchorY });
-          stringItems.push(string);
-          World.add(world, [body, string]);
+          const y = p.constrain(clusterTop + row * yStep + jitterY, baseH * 1.25, p.height - baseH * 0.48);
+          const angle = (seeded(seed, 3) - 0.5) * 0.32;
+          const anchorSpread = Math.min(p.width * 0.36, Math.max(120, count * 16));
+          const anchorX = p.width * 0.5 + (index - (count - 1) / 2) * (anchorSpread / Math.max(1, count - 1 || 1));
+          const anchorY = p.height * 0.17 + Math.sin(index * 1.21) * 8;
+          return {
+            record,
+            x,
+            y,
+            width: baseW * (0.92 + seeded(seed, 4) * 0.18),
+            height: baseH * (0.9 + seeded(seed, 5) * 0.16),
+            angle,
+            anchorX,
+            anchorY,
+            seed,
+          };
         });
-
-        const mouse = Mouse.create(canvas.elt);
-        mouse.pixelRatio = p.pixelDensity();
-        mouseConstraint = MouseConstraint.create(engine, {
-          mouse,
-          constraint: {
-            stiffness: 0.09,
-            damping: 0.18,
-            render: { visible: false },
-          },
-        });
-        World.add(world, mouseConstraint);
       }
 
-      function drawPaperTexture() {
+      function drawWashBackground() {
+        p.background(180, 200, 201);
         p.noStroke();
-        for (let i = 0; i < 70; i += 1) {
-          const alpha = i % 2 === 0 ? 10 : 6;
-          p.fill(255, 248, 232, alpha);
-          p.rect(p.random(p.width), p.random(p.height), p.random(18, 70), 1);
-        }
-        p.stroke(23, 33, 29, 18);
+        p.fill(232, 236, 226, 32);
+        p.rect(p.width * 0.18, p.height * 0.14, p.width * 0.58, p.height * 0.62);
+        p.fill(112, 139, 132, 28);
+        p.rect(p.width * 0.25, p.height * 0.24, p.width * 0.5, p.height * 0.5);
+        p.stroke(255, 248, 232, 16);
         p.strokeWeight(1);
-        for (let x = 24; x < p.width; x += 58) {
-          p.line(x, 0, x + p.random(-18, 18), p.height);
+        for (let i = 0; i < 78; i += 1) {
+          const x = (i * 73) % p.width;
+          const y = (i * 47) % p.height;
+          p.line(x, y, Math.min(p.width, x + 58 + (i % 5) * 12), y + ((i % 3) - 1) * 2);
         }
+        p.stroke(16, 28, 26, 18);
+        for (let x = 22; x < p.width; x += 46) {
+          p.line(x, 0, x + Math.sin(x * 0.03) * 10, p.height);
+        }
+      }
+
+      function drawFaintWriting() {
+        const source = records.map((record) => `${record.recipient || ""}${record.title || ""}`).join("letters");
+        const glyphs = source.replace(/\s+/g, "") || "lettersinmotion";
+        p.textFont("Georgia");
+        p.textSize(12);
+        p.fill(35, 50, 48, 34);
+        p.noStroke();
+        const columns = p.width < 680 ? 5 : 8;
+        for (let col = 0; col < columns; col += 1) {
+          const leftSide = col < columns / 2;
+          const x = leftSide ? 22 + col * 23 : p.width - 30 - (columns - col - 1) * 23;
+          for (let row = 0; row < 24; row += 1) {
+            const index = (col * 17 + row * 3) % glyphs.length;
+            p.text(glyphs.charAt(index), x + Math.sin(row * 0.7 + col) * 2, 42 + row * 22);
+          }
+        }
+      }
+
+      function drawThreads() {
+        p.push();
+        p.noFill();
+        papers.forEach((item, index) => {
+          const top = rotatedPoint(item, 0, -item.height * 0.5);
+          const sway = Math.sin(p.frameCount * 0.012 + item.seed * 0.01) * 4;
+          const controlY = p.lerp(item.anchorY, top.y, 0.52);
+          p.stroke(14, 28, 26, item.record.id === state.selectedId ? 210 : 148);
+          p.strokeWeight(item.record.id === state.selectedId ? 0.95 : 0.55);
+          p.bezier(item.anchorX, item.anchorY, item.anchorX + sway, controlY, top.x - sway * 0.6, controlY, top.x, top.y);
+          if (index % 3 === 0) {
+            p.stroke(127, 40, 35, 86);
+            p.bezier(item.anchorX + 2, item.anchorY, p.width * 0.5, controlY - 28, top.x, controlY + 22, top.x + 2, top.y);
+          }
+        });
+        p.pop();
+      }
+
+      function drawPaperCluster() {
+        papers.forEach((item) => {
+          drawPaper(item);
+        });
+      }
+
+      function drawPaper(item) {
+        const selected = item.record.id === state.selectedId;
+        const hovered = item.record.id === hoveredId;
+        const wobble = Math.sin(p.frameCount * 0.012 + item.seed * 0.03) * 0.018;
+        p.push();
+        p.translate(item.x, item.y);
+        p.rotate(item.angle + wobble);
+        p.rectMode(p.CENTER);
+        p.noStroke();
+        p.fill(24, 26, 21, hovered ? 34 : 22);
+        p.rect(5, 7, item.width, item.height, 2);
+        p.fill(248, 238, 196);
+        p.rect(0, 0, item.width, item.height, 2);
+        p.stroke(selected ? p.color(123, 30, 28, 210) : p.color(88, 74, 53, 92));
+        p.strokeWeight(selected ? 1.35 : 0.75);
+        p.noFill();
+        p.rect(0, 0, item.width, item.height, 2);
+        drawPaperRules(item.width, item.height);
+        drawPaperText(item);
+        p.pop();
+      }
+
+      function drawPaperRules(width, height) {
+        p.stroke(78, 67, 49, 58);
+        p.strokeWeight(0.55);
+        const margin = width * 0.14;
+        const columns = 5;
+        for (let i = 0; i <= columns; i += 1) {
+          const x = p.lerp(-width / 2 + margin, width / 2 - margin, i / columns);
+          p.line(x, -height / 2 + 12, x, height / 2 - 12);
+        }
+        p.line(-width / 2 + margin, -height / 2 + 12, width / 2 - margin, -height / 2 + 12);
+        p.line(-width / 2 + margin, height / 2 - 12, width / 2 - margin, height / 2 - 12);
+      }
+
+      function drawPaperText(item) {
+        const text = `${item.record.title || "Untitled"} ${item.record.recipient || "Private"}`.replace(/\s+/g, "");
+        const glyphs = text || "letter";
+        p.textAlign(p.CENTER, p.TOP);
+        p.textSize(Math.max(6.4, item.width * 0.07));
+        p.fill(37, 33, 28, 172);
+        p.noStroke();
+        const columnCount = 4;
+        for (let col = 0; col < columnCount; col += 1) {
+          const x = p.lerp(-item.width * 0.26, item.width * 0.26, col / Math.max(1, columnCount - 1));
+          for (let row = 0; row < 8; row += 1) {
+            const index = (col * 5 + row) % glyphs.length;
+            p.text(glyphs.charAt(index), x, -item.height * 0.34 + row * item.height * 0.074);
+          }
+        }
+        p.fill(123, 30, 28, 170);
+        p.circle(item.width * 0.31, item.height * 0.34, item.width * 0.07);
       }
 
       function drawFlower() {
+        const scale = p.constrain(p.width / 820, 0.74, 1.32);
         p.push();
-        p.translate(p.width / 2, 4);
+        p.translate(p.width / 2, -36 * scale);
+        p.scale(scale);
         p.noStroke();
         const petals = [
-          [-150, 25, -0.35, 120, 70, "#5c1514"],
-          [-70, 18, -0.08, 150, 88, "#8e2521"],
-          [0, 26, 0, 120, 128, "#b33a31"],
-          [74, 18, 0.1, 150, 86, "#8e2521"],
-          [150, 25, 0.35, 120, 70, "#5c1514"],
+          [-155, 72, -0.5, 176, 70, [111, 17, 14]],
+          [-72, 52, -0.18, 178, 92, [152, 38, 31]],
+          [0, 70, 0, 138, 184, [184, 62, 51]],
+          [74, 54, 0.18, 176, 94, [144, 34, 29]],
+          [154, 76, 0.48, 176, 70, [100, 14, 13]],
+          [0, 18, 0, 116, 116, [121, 24, 20]],
         ];
         petals.forEach(([x, y, angle, width, height, color]) => {
           p.push();
           p.translate(x, y);
           p.rotate(angle);
-          p.fill(color);
+          p.fill(color[0], color[1], color[2], 245);
           p.ellipse(0, 0, width, height);
-          p.stroke(255, 248, 232, 24);
-          p.line(-width * 0.25, 0, width * 0.24, 0);
+          p.stroke(65, 17, 16, 42);
+          p.strokeWeight(0.8);
+          p.line(-width * 0.28, 0, width * 0.27, 0);
           p.pop();
         });
         p.pop();
-
         p.noStroke();
-        p.fill(92, 21, 20, 180);
-        stringItems.forEach((string) => {
-          p.circle(string.pointA.x, string.pointA.y, 8);
-        });
-      }
-
-      function drawStrings() {
-        p.noFill();
-        stringItems.forEach((string) => {
-          const end = string.bodyB.position;
-          const start = string.pointA;
-          p.stroke(23, 33, 29, 150);
-          p.strokeWeight(1.15);
-          p.line(start.x, start.y, end.x, end.y - 36);
-        });
-      }
-
-      function drawLetters() {
-        letterItems.forEach((item) => {
-          const { body, record, width, height } = item;
-          const selected = record.id === state.selectedId;
-          p.push();
-          p.translate(body.position.x, body.position.y);
-          p.rotate(body.angle);
-          p.rectMode(p.CENTER);
-          p.noStroke();
-          p.fill(0, 0, 0, 22);
-          p.rect(4, 6, width, height, 6);
-          p.fill(255, 246, 217);
-          p.rect(0, 0, width, height, 6);
-          p.stroke(selected ? p.color(157, 45, 40) : p.color(120, 96, 62, 100));
-          p.strokeWeight(selected ? 2.5 : 1);
-          p.noFill();
-          p.rect(0, 0, width, height, 6);
-          p.stroke(120, 96, 62, 110);
-          p.line(-width / 2, -height / 2, 0, 8);
-          p.line(width / 2, -height / 2, 0, 8);
-          p.line(-width / 2, height / 2, -8, 4);
-          p.line(width / 2, height / 2, 8, 4);
-          p.noStroke();
-          p.fill(record.accent || "#9d2d28");
-          p.circle(0, 8, 18);
-          p.fill(23, 33, 29);
-          p.textAlign(p.CENTER, p.CENTER);
-          p.textSize(12);
-          p.text(truncate(record.recipient || "Private", 16), 0, -17, width - 18);
-          p.textSize(10);
-          p.fill(69, 81, 75);
-          p.text(truncate(record.title || "Untitled", 20), 0, 27, width - 18);
-          p.pop();
-        });
+        p.fill(14, 28, 26, 150);
+        papers.forEach((item) => p.circle(item.anchorX, item.anchorY, 2.4));
       }
 
       function drawInstruction() {
         p.noStroke();
-        p.fill(23, 33, 29, 170);
+        p.fill(23, 33, 29, 150);
         p.textAlign(p.CENTER, p.BOTTOM);
         p.textSize(13);
-        p.text("Drag the envelopes. Click one to open with its key.", p.width / 2, p.height - 18);
+        p.text("Click a hanging paper to open it with its key.", p.width / 2, p.height - 18);
+      }
+
+      function hitTest(x, y) {
+        for (let i = papers.length - 1; i >= 0; i -= 1) {
+          if (pointInPaper(papers[i], x, y)) return papers[i];
+        }
+        return null;
+      }
+
+      function pointInPaper(item, x, y) {
+        const wobble = Math.sin(p.frameCount * 0.012 + item.seed * 0.03) * 0.018;
+        const angle = -(item.angle + wobble);
+        const dx = x - item.x;
+        const dy = y - item.y;
+        const localX = dx * Math.cos(angle) - dy * Math.sin(angle);
+        const localY = dx * Math.sin(angle) + dy * Math.cos(angle);
+        return Math.abs(localX) <= item.width / 2 && Math.abs(localY) <= item.height / 2;
+      }
+
+      function rotatedPoint(item, x, y) {
+        const angle = item.angle;
+        return {
+          x: item.x + x * Math.cos(angle) - y * Math.sin(angle),
+          y: item.y + x * Math.sin(angle) + y * Math.cos(angle),
+        };
+      }
+
+      function hashString(value) {
+        let hash = 2166136261;
+        for (let i = 0; i < value.length; i += 1) {
+          hash ^= value.charCodeAt(i);
+          hash = Math.imul(hash, 16777619);
+        }
+        return hash >>> 0;
+      }
+
+      function seeded(seed, salt) {
+        const value = Math.sin((seed + salt * 1013) * 0.000001) * 10000;
+        return value - Math.floor(value);
       }
     }, el.galleryCanvas);
   }
@@ -1606,6 +1661,445 @@
   }
 
   function createRiverSketch(plaintext) {
+    return new window.p5((p) => {
+      let canvas;
+      let layout;
+      let glyphs = [];
+      let startMillis = 0;
+      let lastChimeAt = 0;
+
+      const blue = [38, 91, 213];
+      const lineBlue = [152, 190, 230];
+      const ink = [17, 23, 31];
+      const gold = [231, 192, 66];
+      const paper = [229, 231, 216];
+
+      p.setup = () => {
+        p.pixelDensity(1);
+        canvas = p.createCanvas(
+          Math.max(320, el.riverCanvas.clientWidth),
+          Math.max(440, el.riverCanvas.clientHeight),
+        );
+        canvas.parent(el.riverCanvas);
+        p.textFont("Georgia");
+        resetScene();
+      };
+
+      p.draw = () => {
+        const t = elapsed();
+        drawBackground(t);
+        drawPaperArchitecture(t);
+        drawBoat(t);
+        drawGlyphField(t);
+        drawFinalUnfurl(t);
+      };
+
+      p.windowResized = () => {
+        const width = Math.max(320, el.riverCanvas.clientWidth);
+        const height = Math.max(440, el.riverCanvas.clientHeight);
+        p.resizeCanvas(width, height);
+        resetScene();
+      };
+
+      p.cleanup = () => {};
+
+      function resetScene() {
+        startMillis = p.millis();
+        lastChimeAt = 0;
+        layout = buildRiverLayout();
+        glyphs = buildGlyphField();
+      }
+
+      function elapsed() {
+        return (p.millis() - startMillis) / 1000;
+      }
+
+      function buildRiverLayout() {
+        const text = [
+          plaintext.recipient ? `To ${plaintext.recipient}` : "",
+          plaintext.title || "Untitled letter",
+          plaintext.message || "",
+        ].join(" ");
+        const clean = text.replace(/\s+/g, " ").trim() || "letters in motion";
+        const compact = clean.replace(/\s+/g, "");
+        const characters = [...compact];
+        const columnCount = p.width < 680 ? 5 : 8;
+        const page = {
+          x: p.width * (p.width < 680 ? 0.49 : 0.56),
+          y: p.height * 0.48,
+          w: Math.min(p.width * 0.62, 520),
+          h: p.height * 0.72,
+        };
+        const columns = [];
+        const columnGap = page.w / Math.max(1, columnCount - 1);
+        const top = page.y - page.h * 0.43;
+        const bottom = page.y + page.h * 0.43;
+        for (let i = 0; i < columnCount; i += 1) {
+          const x = page.x - page.w / 2 + i * columnGap;
+          const phase = i * 0.73;
+          columns.push({
+            x,
+            top: top + Math.sin(i * 0.9) * 16,
+            bottom: bottom + Math.cos(i * 0.7) * 22,
+            phase,
+            chars: [],
+          });
+        }
+
+        characters.forEach((char, index) => {
+          columns[index % columns.length].chars.push({ char, order: index });
+        });
+
+        return {
+          clean,
+          characters,
+          columns,
+          page,
+          boat: {
+            x: p.width * (p.width < 680 ? 0.13 : 0.14),
+            y: p.height * 0.64,
+            scale: p.constrain(p.width / 860, 0.58, 1.0),
+          },
+        };
+      }
+
+      function buildGlyphField() {
+        const source = layout.characters.length ? layout.characters : [..."lettersinmotion"];
+        const count = Math.min(p.width < 680 ? 116 : 174, Math.max(74, source.length * 2));
+        const list = [];
+        for (let i = 0; i < count; i += 1) {
+          const column = layout.columns[i % layout.columns.length];
+          const columnSpan = Math.max(1, column.bottom - column.top);
+          const seed = hashString(`${source[i % source.length]}-${i}-${plaintext.createdAt || ""}`);
+          const rowT = seeded(seed, 1);
+          const startX = column.x + (seeded(seed, 2) - 0.5) * 10;
+          const startY = column.top + rowT * columnSpan;
+          const kindRoll = seeded(seed, 3);
+          const kind = kindRoll > 0.78 ? "star" : kindRoll > 0.46 ? "moon" : kindRoll > 0.2 ? "letter" : "dot";
+          list.push({
+            char: source[i % source.length],
+            kind,
+            pathIndex: i % 3,
+            pathOffset: seeded(seed, 4) * 0.16,
+            startX,
+            startY,
+            delay: 0.85 + i * (p.width < 680 ? 0.026 : 0.018) + seeded(seed, 5) * 0.42,
+            duration: 6.2 + seeded(seed, 6) * 2.4,
+            size: p.lerp(7, p.width < 680 ? 14 : 17, seeded(seed, 7)),
+            phase: seeded(seed, 8) * p.TWO_PI,
+            chime: false,
+          });
+        }
+        return list;
+      }
+
+      function drawBackground(t) {
+        p.background(blue[0], blue[1], blue[2]);
+        p.noStroke();
+        p.fill(255, 255, 255, 9);
+        for (let i = 0; i < 96; i += 1) {
+          const x = (i * 89 + Math.sin(i) * 31) % p.width;
+          const y = (i * 53 + Math.cos(i * 0.8) * 25) % p.height;
+          p.rect(x, y, 1 + (i % 3), 1);
+        }
+        p.stroke(12, 28, 70, 18);
+        p.strokeWeight(1);
+        for (let x = 18; x < p.width; x += 42) {
+          p.line(x + Math.sin(t * 0.08 + x) * 3, 0, x + Math.sin(t * 0.08 + x) * 6, p.height);
+        }
+      }
+
+      function drawPaperArchitecture(t) {
+        const reveal = easeInOutCubic(p.constrain(t / 1.7, 0, 1));
+        const page = layout.page;
+        p.push();
+        p.noFill();
+        p.stroke(lineBlue[0], lineBlue[1], lineBlue[2], 84 * reveal);
+        p.strokeWeight(1);
+        p.beginShape();
+        p.curveVertex(page.x - page.w * 0.56, page.y - page.h * 0.45);
+        p.curveVertex(page.x - page.w * 0.52, page.y - page.h * 0.46);
+        p.curveVertex(page.x - page.w * 0.47, page.y - page.h * 0.08);
+        p.curveVertex(page.x - page.w * 0.52, page.y + page.h * 0.45);
+        p.curveVertex(page.x - page.w * 0.48, page.y + page.h * 0.48);
+        p.endShape();
+        p.beginShape();
+        p.curveVertex(page.x + page.w * 0.53, page.y - page.h * 0.44);
+        p.curveVertex(page.x + page.w * 0.55, page.y - page.h * 0.42);
+        p.curveVertex(page.x + page.w * 0.47, page.y - page.h * 0.03);
+        p.curveVertex(page.x + page.w * 0.54, page.y + page.h * 0.38);
+        p.curveVertex(page.x + page.w * 0.5, page.y + page.h * 0.46);
+        p.endShape();
+
+        layout.columns.forEach((column, index) => {
+          p.stroke(lineBlue[0], lineBlue[1], lineBlue[2], 110 * reveal);
+          p.strokeWeight(index % 2 ? 0.75 : 1);
+          p.beginShape();
+          for (let step = 0; step <= 18; step += 1) {
+            const amount = step / 18;
+            const y = p.lerp(column.top, column.bottom, amount);
+            const x = column.x + Math.sin(amount * p.PI * 2 + column.phase + t * 0.06) * 8;
+            p.curveVertex(x, y);
+          }
+          p.endShape();
+          drawColumnText(column, index, reveal);
+        });
+        p.pop();
+      }
+
+      function drawColumnText(column, index, reveal) {
+        const chars = column.chars.length ? column.chars : [{ char: " " }];
+        const maxChars = Math.min(chars.length, p.width < 680 ? 15 : 20);
+        const step = Math.min(21, Math.max(15, (column.bottom - column.top) / Math.max(1, maxChars)));
+        p.noStroke();
+        p.fill(12, 18, 34, 132 * reveal);
+        p.textAlign(p.CENTER, p.TOP);
+        p.textSize(p.width < 680 ? 11 : 13);
+        for (let i = 0; i < maxChars; i += 1) {
+          const item = chars[i % chars.length];
+          const x = column.x + Math.sin(i * 0.72 + index) * 2.4;
+          const y = column.top + i * step;
+          p.text(item.char, x, y);
+        }
+      }
+
+      function drawBoat(t) {
+        const boat = layout.boat;
+        p.push();
+        p.translate(boat.x + Math.sin(t * 0.6) * 3, boat.y + Math.sin(t * 0.9) * 2);
+        p.scale(boat.scale);
+        p.noStroke();
+        p.fill(10, 19, 38, 28);
+        p.beginShape();
+        p.vertex(-66, 23);
+        p.vertex(60, 20);
+        p.vertex(30, 36);
+        p.vertex(-36, 39);
+        p.endShape(p.CLOSE);
+        p.fill(218, 225, 222, 235);
+        p.stroke(72, 102, 132, 135);
+        p.strokeWeight(1.1);
+        p.beginShape();
+        p.vertex(-66, 0);
+        p.vertex(72, -3);
+        p.vertex(32, 28);
+        p.vertex(-36, 28);
+        p.endShape(p.CLOSE);
+        p.line(-66, 0, -10, 24);
+        p.line(72, -3, 9, 24);
+        p.noFill();
+        p.stroke(lineBlue[0], lineBlue[1], lineBlue[2], 110);
+        p.strokeWeight(0.75);
+        for (let i = 0; i < 4; i += 1) {
+          const target = streamPoint(0.16 + i * 0.16, i % 3);
+          p.line(42, 2, (target.x - boat.x) / boat.scale, (target.y - boat.y) / boat.scale);
+        }
+        p.pop();
+      }
+
+      function drawGlyphField(t) {
+        drawStreamGuides(t);
+        const states = glyphs.map((glyph) => glyphState(glyph, t));
+        p.push();
+        p.noFill();
+        states.forEach((state, index) => {
+          if (index % 13 !== 0 || state.alpha <= 8) return;
+          p.stroke(238, 221, 151, state.alpha * 0.18);
+          p.strokeWeight(0.55);
+          p.line(layout.boat.x + 18, layout.boat.y - 2, state.x, state.y);
+        });
+        p.pop();
+
+        states.forEach((state) => {
+          if (state.alpha <= 1) return;
+          drawGlyph(state);
+          if (state.progress > 0.64 && !state.source.chime && t - lastChimeAt > 0.1) {
+            state.source.chime = true;
+            lastChimeAt = t;
+            playWaterChime(0.48, p.map(state.x, 0, p.width, -0.6, 0.6));
+          }
+        });
+      }
+
+      function drawStreamGuides(t) {
+        p.push();
+        p.noFill();
+        for (let pathIndex = 0; pathIndex < 3; pathIndex += 1) {
+          p.stroke(lineBlue[0], lineBlue[1], lineBlue[2], 70);
+          p.strokeWeight(pathIndex === 1 ? 1 : 0.75);
+          p.beginShape();
+          for (let i = 0; i <= 52; i += 1) {
+            const amount = i / 52;
+            const point = streamPoint(amount, pathIndex);
+            p.curveVertex(point.x + Math.sin(t * 0.12 + i) * 1.2, point.y);
+          }
+          p.endShape();
+        }
+        p.pop();
+      }
+
+      function glyphState(glyph, t) {
+        const raw = p.constrain((t - glyph.delay) / glyph.duration, 0, 1);
+        const scatter = easeInOutCubic(p.constrain((t - glyph.delay) / 2.25, 0, 1));
+        const pathT = p.constrain(raw + glyph.pathOffset, 0, 1);
+        const target = streamPoint(pathT, glyph.pathIndex);
+        const breathe = Math.sin(t * 1.1 + glyph.phase) * (1 - raw) * 7;
+        const x = p.lerp(glyph.startX, target.x, scatter) + Math.sin(t * 0.9 + glyph.phase) * 3;
+        const y = p.lerp(glyph.startY, target.y, scatter) + breathe;
+        const alphaIn = easeInOutCubic(p.constrain((t - glyph.delay + 0.4) / 1.4, 0, 1));
+        const alphaOut = 1 - easeInOutCubic(p.constrain((t - 12.6) / 2.1, 0, 1));
+        return {
+          source: glyph,
+          kind: glyph.kind,
+          char: glyph.char,
+          x,
+          y,
+          progress: raw,
+          size: glyph.size * (0.88 + Math.sin(t * 1.4 + glyph.phase) * 0.07),
+          angle: glyph.phase + raw * p.PI * 1.2,
+          alpha: 238 * alphaIn * alphaOut,
+        };
+      }
+
+      function streamPoint(amount, pathIndex) {
+        const a = p.constrain(amount, 0, 1);
+        const w = p.width;
+        const h = p.height;
+        const variants = [
+          [
+            { x: w * 0.52, y: h * 0.13 },
+            { x: w * 0.83, y: h * 0.12 },
+            { x: w * 0.42, y: h * 0.43 },
+            { x: w * 0.82, y: h * 0.58 },
+          ],
+          [
+            { x: w * 0.19, y: h * 0.61 },
+            { x: w * 0.42, y: h * 0.48 },
+            { x: w * 0.72, y: h * 0.52 },
+            { x: w * 0.88, y: h * 0.86 },
+          ],
+          [
+            { x: w * 0.7, y: h * 0.18 },
+            { x: w * 0.93, y: h * 0.3 },
+            { x: w * 0.54, y: h * 0.72 },
+            { x: w * 0.76, y: h * 0.95 },
+          ],
+        ];
+        return cubicPoint(variants[pathIndex], a);
+      }
+
+      function drawGlyph(state) {
+        p.push();
+        p.translate(state.x, state.y);
+        p.rotate(state.angle);
+        p.noStroke();
+        if (state.kind === "moon") {
+          drawCrescent(0, 0, state.size, state.alpha);
+        } else if (state.kind === "star") {
+          p.fill(gold[0], gold[1], gold[2], state.alpha);
+          drawSmallStar(0, 0, state.size * 0.38, state.size * 0.82, 5);
+        } else if (state.kind === "letter") {
+          p.textFont("Georgia");
+          p.textAlign(p.CENTER, p.CENTER);
+          p.textSize(state.size * 1.18);
+          p.fill(gold[0], gold[1], gold[2], state.alpha * 0.94);
+          p.text(state.char, 0, 0);
+        } else {
+          p.fill(246, 230, 158, state.alpha);
+          p.circle(0, 0, Math.max(2, state.size * 0.24));
+        }
+        p.pop();
+      }
+
+      function drawCrescent(x, y, size, alpha) {
+        p.fill(gold[0], gold[1], gold[2], alpha);
+        p.circle(x, y, size);
+        p.fill(blue[0], blue[1], blue[2], alpha);
+        p.circle(x + size * 0.34, y - size * 0.08, size * 0.88);
+      }
+
+      function drawFinalUnfurl(t) {
+        const show = easeInOutCubic(p.constrain((t - 10.6) / 3.2, 0, 1));
+        if (show <= 0) return;
+        const w = Math.min(430, p.width * 0.62);
+        const h = Math.min(300, p.height * 0.5);
+        const x = p.width * 0.5;
+        const y = p.height * 0.56;
+        p.push();
+        p.translate(x, y);
+        p.scale(0.92 + show * 0.08, show);
+        p.noStroke();
+        p.fill(paper[0], paper[1], paper[2], 208 * show);
+        p.rectMode(p.CENTER);
+        p.rect(0, 0, w, h, 2);
+        p.stroke(80, 92, 96, 58 * show);
+        p.strokeWeight(0.75);
+        const columns = p.width < 680 ? 5 : 7;
+        for (let i = 0; i <= columns; i += 1) {
+          const cx = p.lerp(-w * 0.42, w * 0.42, i / columns);
+          p.line(cx, -h * 0.42, cx, h * 0.42);
+        }
+        p.noStroke();
+        p.fill(16, 21, 28, 190 * show);
+        p.textFont("Georgia");
+        p.textAlign(p.CENTER, p.TOP);
+        p.textSize(Math.max(12, Math.min(16, w / 28)));
+        const chars = layout.clean.replace(/\s+/g, "").slice(0, columns * 16);
+        for (let col = 0; col < columns; col += 1) {
+          const cx = p.lerp(-w * 0.35, w * 0.35, col / Math.max(1, columns - 1));
+          for (let row = 0; row < 16; row += 1) {
+            const char = chars.charAt(col * 16 + row);
+            if (!char) continue;
+            p.text(char, cx, -h * 0.38 + row * 16);
+          }
+        }
+        p.pop();
+      }
+
+      function cubicPoint(points, amount) {
+        const mt = 1 - amount;
+        const x = mt ** 3 * points[0].x
+          + 3 * mt * mt * amount * points[1].x
+          + 3 * mt * amount * amount * points[2].x
+          + amount ** 3 * points[3].x;
+        const y = mt ** 3 * points[0].y
+          + 3 * mt * mt * amount * points[1].y
+          + 3 * mt * amount * amount * points[2].y
+          + amount ** 3 * points[3].y;
+        return { x, y };
+      }
+
+      function drawSmallStar(x, y, innerRadius, outerRadius, points) {
+        p.beginShape();
+        for (let i = 0; i < points * 2; i += 1) {
+          const angle = -p.HALF_PI + (i * p.PI) / points;
+          const radius = i % 2 === 0 ? outerRadius : innerRadius;
+          p.vertex(x + Math.cos(angle) * radius, y + Math.sin(angle) * radius);
+        }
+        p.endShape(p.CLOSE);
+      }
+
+      function hashString(value) {
+        let hash = 2166136261;
+        for (let i = 0; i < value.length; i += 1) {
+          hash ^= value.charCodeAt(i);
+          hash = Math.imul(hash, 16777619);
+        }
+        return hash >>> 0;
+      }
+
+      function seeded(seed, salt) {
+        const value = Math.sin((seed + salt * 7919) * 0.000001) * 10000;
+        return value - Math.floor(value);
+      }
+
+      function easeInOutCubic(t) {
+        return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      }
+    }, el.riverCanvas);
+  }
+
+  function createPreviousRiverSketch(plaintext) {
     return new window.p5((p) => {
       const VERTEX_SHADER = `
         precision mediump float;

@@ -28,7 +28,7 @@ Write_Letters/
 
 `src/styles.css` controls the responsive layout, paper forms, gallery panels, modal states, canvas containers, and final letter reveal.
 
-`src/app.js` contains the full application logic: state management, encryption, local storage, sharing, audio, Matter.js physics, and the p5.js Galaxy River animation.
+`src/app.js` contains the full application logic: state management, encryption, local storage, sharing, audio, the p5.js gallery installation, and the p5.js Galaxy River animation.
 
 ## Privacy Model
 
@@ -67,33 +67,34 @@ The app does not call an AI service or a paid media API. All visual and audio fe
 
 ## Gallery Phase
 
-The gallery uses Matter.js to make sealed letters feel physical:
+The gallery is a restrained hanging-paper installation:
 
-- each letter is represented as a hanging envelope body;
-- constraints attach envelopes to anchor points;
-- gravity, damping, and collision settings provide weight;
-- mouse constraints let the user drag and select envelopes.
+- a large red flower canopy sits above the scene;
+- thin dark threads descend from the flower;
+- encrypted letters appear as ivory ruled papers rather than cartoon envelopes;
+- each paper uses vertical micro-type to suggest handwritten columns;
+- selecting a paper opens the unlock modal.
 
-The gallery is a local vault. It is built from encrypted records stored in `localStorage`, and selecting an envelope opens the unlock modal.
+The gallery is a local vault. It is built from encrypted records stored in `localStorage`. The visual priority is deliberate linework, paper weight, and quiet composition rather than bouncy physics.
 
 ## Galaxy River Phase
 
-After a correct key, the app starts the p5.js Galaxy River sketch. The sequence is designed as a short emotional arc:
+After a correct key, the app starts the p5.js Galaxy River sketch. The sequence is designed as a flat illustrated paper-river:
 
-1. A sealed envelope floats in warm darkness.
-2. A bright rose-memory burst opens the scene.
-3. The atmosphere collapses into a cold galaxy river.
-4. The user's words become falling star-glyphs.
-5. Star-glyphs hit the water, trigger chimes, and create concentric ripples.
-6. Reflections stretch and shimmer across the water surface.
-7. A paper boat appears and opens into a readable letter.
+1. A cobalt blue field opens with pale ruled paper lines.
+2. The decrypted words appear as vertical handwritten columns.
+3. A small paper boat anchors the left side of the composition.
+4. Gold moon, star, dot, and letter glyphs detach from the columns.
+5. The glyphs sweep through thin curved paths like musical notation or constellation sorting.
+6. Fine threads connect selected glyphs back to the boat.
+7. A final pale paper field unfurls into readable vertical columns.
 8. The side reading panel fades in after the cinematic reveal.
 
 The readable message is deliberately delayed. During the animation, the text is treated as living material rather than static UI copy.
 
 ## Text as Motion
 
-The river sketch builds a layout from the decrypted recipient, title, and message. It wraps those lines to fit the final paper, then converts each visible character into a glyph record:
+The river sketch builds a layout from the decrypted recipient, title, and message. It removes excess whitespace, places the characters into vertical columns, then converts selected characters into moving glyph records:
 
 ```js
 {
@@ -107,32 +108,32 @@ The river sketch builds a layout from the decrypted recipient, title, and messag
 }
 ```
 
-Those records become falling `glyphStars`. Each one receives a sky position, a water impact position, duration, sway, spin, alpha scale, and impact state. Sequential letters from the same word can draw fine connection lines, echoing generative typography sketches where language moves between readable order and abstract structure.
+Those records become a typography particle field. Each glyph has a column origin, a path assignment, a delay, a duration, a symbol type, and a size. During the reveal, characters move from readable columns into sweeping constellation curves.
 
 ## River Effect Details
 
-The current river implementation follows the project guide's priority fixes:
+The current river implementation follows these design principles:
 
-- the shader uses a stronger warm-to-cold color split;
-- nebula color and a soft dust lane make the background less flat;
-- water ripples use four slower shader rings instead of two fast rings;
-- canvas ripples become visible early in the collapse;
-- letter glyphs render with orbiting micro-stars;
-- reflections use warm letter colors, cool star colors, horizontal shimmer, and wider scaling;
-- fireflies have larger additive halos;
-- the rose-memory burst has an early white flash and denser additive rings;
-- star timing begins during the collapse instead of after it.
+- thin deliberate lines replace halos and bloom;
+- letterforms are treated as physical objects with origin, weight, and direction;
+- gold symbols are limited to moons, stars, dots, and selected letters;
+- the blue field stays flat and graphic rather than cinematic;
+- motion is organized by sweeping curves rather than random particle drift;
+- density is restrained so the composition stays poetic and legible.
 
-The result should feel less like a static glowing-letter scene and more like a physical river where the user's words become light, water, sound, and reflection.
+The result should feel closer to a handmade poetic diagram than a generic galaxy animation.
 
 ## Rendering Pipeline
 
-The Galaxy River sketch uses two layers:
+The redesigned Galaxy River sketch uses a single p5.js 2D canvas:
 
-1. A WEBGL shader draws the atmospheric background, galaxy, stars, water color, and shader-side ripple light.
-2. A transparent p5 graphics layer draws envelopes, rose particles, fireflies, glyph stars, ripples, reflections, boat, and paper text.
+1. Draw the cobalt blue paper field and subtle grain.
+2. Draw pale ruled paper architecture and vertical handwriting columns.
+3. Draw the paper boat and its thin guide threads.
+4. Move gold glyphs from text columns into constellation curves.
+5. Unfurl the final pale paper field before the side reading panel appears.
 
-The transparent layer is composited above the shader. This keeps the background efficient while allowing detailed 2D drawing for letter particles and foreground effects.
+This is intentionally simpler than the previous WEBGL shader approach. The aesthetic depends on typography, line quality, and composition, not rendered light effects.
 
 ## Sound Design
 
@@ -150,8 +151,8 @@ The sound direction is restrained: fragile, luminous, and close to the letter ra
 The project runs as a static browser app using free web technologies:
 
 - HTML and CSS;
-- p5.js for generative drawing and shaders;
-- Matter.js for the gallery physics;
+- p5.js for generative drawing;
+- Matter.js is still loaded but is no longer required by the current gallery sketch;
 - Web Crypto API for encryption;
 - Web Audio API for procedural sound;
 - browser `localStorage` for the encrypted vault.
@@ -182,7 +183,7 @@ Use this checklist after changing the project:
 2. Seal a letter and confirm only encrypted data is saved.
 3. Open the gallery and confirm envelopes render, move, and can be selected.
 4. Unlock a letter with the correct key and confirm the river animation starts.
-5. Watch for the guide-aligned effects: bright burst, warm-to-cold collapse, falling glyphs, early ripples, stronger reflections, firefly halos, chimes, boat, and final readable paper.
+5. Watch for the redesigned effects: flower-and-thread gallery, ivory hanging papers, blue paper river, vertical handwriting columns, gold moon/star glyphs, sweeping curves, paper boat, and final readable paper.
 6. Copy a secure link and confirm the encrypted `#open=` flow can be opened and decrypted with the access key.
 
 ## Future Improvements
