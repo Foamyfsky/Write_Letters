@@ -695,7 +695,7 @@
   }
 
   function pickAccent() {
-    const accents = ["#9d2d28", "#2057bb", "#f4c845", "#17211d"];
+    const accents = ["#7b3931", "#526f73", "#b9954e", "#151817"];
     return accents[Math.floor(Math.random() * accents.length)];
   }
 
@@ -851,7 +851,7 @@
       };
 
       p.draw = () => {
-        p.background(186, 202, 196);
+        p.background(197, 189, 163);
         drawPaperTexture();
         Engine.update(engine, 1000 / 60);
         drawFlower();
@@ -960,10 +960,10 @@
         p.noStroke();
         for (let i = 0; i < 70; i += 1) {
           const alpha = i % 2 === 0 ? 10 : 6;
-          p.fill(255, 248, 232, alpha);
+          p.fill(247, 238, 216, alpha);
           p.rect(p.random(p.width), p.random(p.height), p.random(18, 70), 1);
         }
-        p.stroke(23, 33, 29, 18);
+        p.stroke(21, 24, 23, 20);
         p.strokeWeight(1);
         for (let x = 24; x < p.width; x += 58) {
           p.line(x, 0, x + p.random(-18, 18), p.height);
@@ -975,11 +975,11 @@
         p.translate(p.width / 2, 4);
         p.noStroke();
         const petals = [
-          [-150, 25, -0.35, 120, 70, "#5c1514"],
-          [-70, 18, -0.08, 150, 88, "#8e2521"],
-          [0, 26, 0, 120, 128, "#b33a31"],
-          [74, 18, 0.1, 150, 86, "#8e2521"],
-          [150, 25, 0.35, 120, 70, "#5c1514"],
+          [-150, 25, -0.35, 120, 70, "#4f201d"],
+          [-70, 18, -0.08, 150, 88, "#6e3831"],
+          [0, 26, 0, 120, 128, "#895346"],
+          [74, 18, 0.1, 150, 86, "#6e3831"],
+          [150, 25, 0.35, 120, 70, "#4f201d"],
         ];
         petals.forEach(([x, y, angle, width, height, color]) => {
           p.push();
@@ -1064,10 +1064,10 @@
     showView("river");
     playUnlockBloom();
     destroyRiverSketch();
-    state.riverSketch = createStoryRiverSketch(plaintext, () => showCompletedRiverLetter(plaintext));
+    state.riverSketch = createEditorialRiverSketch(plaintext, () => showCompletedRiverLetter(plaintext));
     state.revealTimer = window.setTimeout(() => {
       showCompletedRiverLetter(plaintext);
-    }, 36800);
+    }, 39800);
   }
 
   function renderRiverLetter(plaintext) {
@@ -1100,7 +1100,1355 @@
     state.riverSketch = null;
   }
 
-  function createStoryRiverSketch(plaintext, onComplete) {
+  function createEditorialRiverSketch(plaintext, onComplete) {
+    return new window.p5((p) => {
+      const STORY_END = 39.2;
+      const palette = {
+        night: [8, 12, 27],
+        midnight: [14, 25, 49],
+        dawn: [196, 178, 132],
+        paper: [232, 224, 202],
+        paperLight: [246, 239, 221],
+        paperDeep: [184, 170, 137],
+        ink: [18, 21, 22],
+        lace: [238, 236, 226],
+        ochre: [191, 155, 77],
+        blueWing: [83, 163, 187],
+        mutedTeal: [86, 139, 139],
+        rust: [143, 80, 62],
+      };
+      const fragmentColors = [
+        [245, 238, 219],
+        [225, 211, 169],
+        [186, 202, 196],
+        [205, 185, 132],
+      ];
+      const cityColors = [
+        [215, 204, 169],
+        [142, 173, 163],
+        [191, 139, 121],
+        [92, 101, 115],
+        [184, 170, 137],
+        [109, 137, 158],
+      ];
+
+      let staticStars = [];
+      let fogBands = [];
+      let butterflies = [];
+      let wordDrops = [];
+      let ripples = [];
+      let birds = [];
+      let paperFibers = [];
+      let cityPieces = [];
+      let collageWords = [];
+      let finalLayout = null;
+      let startMillis = 0;
+      let waterY = 0;
+      let completed = false;
+      let lastChimeAt = 0;
+      let chimeCount = 0;
+
+      p.setup = () => {
+        p.pixelDensity(1);
+        p.frameRate(60);
+        const canvas = p.createCanvas(
+          Math.max(320, el.riverCanvas.clientWidth),
+          Math.max(440, el.riverCanvas.clientHeight),
+        );
+        canvas.parent(el.riverCanvas);
+        p.textFont("Georgia");
+        resetScene();
+      };
+
+      p.draw = () => {
+        const t = elapsed();
+        drawStoryBackground(t);
+        drawMoonAndStars(t);
+        drawCityscapeMusic(t);
+        drawWaterStage(t);
+        drawEnvelope(t);
+        drawLaceBloom(t);
+        drawButterflies(t);
+        drawTypographicCascade(t);
+        drawWordRain(t);
+        drawRipples(t);
+        drawMemoryThreads(t);
+        drawBoatPlaneAndBirds(t);
+        drawDestination(t);
+        drawFinalLetter(t);
+        drawForegroundGrain(t);
+
+        if (!completed && t > STORY_END) {
+          completed = true;
+          if (typeof onComplete === "function") onComplete();
+        }
+      };
+
+      p.windowResized = () => {
+        const width = Math.max(320, el.riverCanvas.clientWidth);
+        const height = Math.max(440, el.riverCanvas.clientHeight);
+        p.resizeCanvas(width, height);
+        resetScene();
+      };
+
+      p.cleanup = () => {};
+
+      function resetScene() {
+        startMillis = p.millis();
+        waterY = p.height * 0.69;
+        completed = false;
+        lastChimeAt = 0;
+        chimeCount = 0;
+        collageWords = buildCollageWords();
+        staticStars = buildStaticStars();
+        fogBands = buildFogBands();
+        paperFibers = buildPaperFibers();
+        cityPieces = buildCityPieces();
+        butterflies = buildButterflies();
+        wordDrops = buildWordDrops();
+        birds = buildBirds();
+        ripples = [];
+        finalLayout = buildFinalLetterLayout();
+      }
+
+      function elapsed() {
+        return (p.millis() - startMillis) / 1000;
+      }
+
+      function buildFullText() {
+        return [
+          plaintext.recipient ? `To ${plaintext.recipient}` : "",
+          plaintext.title || "Untitled letter",
+          "",
+          plaintext.message || "",
+        ].filter((line, index) => index < 3 || String(line).trim()).join("\n");
+      }
+
+      function buildCollageWords() {
+        const words = buildFullText()
+          .replace(/[^\w\s'-]/g, " ")
+          .split(/\s+/)
+          .filter((word) => word.length > 1)
+          .slice(0, 220);
+        if (words.length) return words;
+        return ["letter", "memory", "love", "arrival", "quiet", "home"];
+      }
+
+      function buildStaticStars() {
+        const count = p.width < 680 ? 80 : 125;
+        const stars = [];
+        for (let i = 0; i < count; i += 1) {
+          stars.push({
+            x: p.random(p.width),
+            y: p.random(p.height * 0.02, p.height * 0.72),
+            r: p.random(0.35, 1.25),
+            phase: p.random(p.TWO_PI),
+            alpha: p.random(42, 145),
+            warm: p.random() > 0.48,
+          });
+        }
+        return stars;
+      }
+
+      function buildFogBands() {
+        const bands = [];
+        for (let i = 0; i < 9; i += 1) {
+          bands.push({
+            y: p.random(p.height * 0.27, p.height * 0.84),
+            width: p.random(p.width * 0.42, p.width * 1.05),
+            height: p.random(18, 54),
+            speed: p.random(0.025, 0.08),
+            phase: p.random(p.TWO_PI),
+          });
+        }
+        return bands;
+      }
+
+      function buildPaperFibers() {
+        const count = p.width < 680 ? 230 : 390;
+        const fibers = [];
+        for (let i = 0; i < count; i += 1) {
+          fibers.push({
+            x: p.random(p.width),
+            y: p.random(p.height),
+            length: p.random(8, 74),
+            angle: p.random(-0.18, 0.18) + (p.random() > 0.8 ? p.HALF_PI : 0),
+            alpha: p.random(8, 34),
+            weight: p.random(0.35, 0.9),
+            warm: p.random() > 0.45,
+          });
+        }
+        return fibers;
+      }
+
+      function buildCityPieces() {
+        const count = p.width < 680 ? 13 : 22;
+        const baseY = p.height * 0.79;
+        const pieces = [];
+        for (let i = 0; i < count; i += 1) {
+          const spread = count === 1 ? 0.5 : i / (count - 1);
+          const w = p.random(28, 64) * (p.width < 680 ? 0.72 : 1);
+          const h = p.random(54, 168) * (p.width < 680 ? 0.72 : 1);
+          pieces.push({
+            x: p.lerp(-18, p.width - 18, spread) + p.random(-16, 16),
+            y: baseY - h + p.random(-8, 22),
+            w,
+            h,
+            color: cityColors[i % cityColors.length],
+            roof: i % 4,
+            textIndex: i % collageWords.length,
+          });
+        }
+        return pieces;
+      }
+
+      function buildButterflies() {
+        const count = p.width < 680 ? 9 : 15;
+        const list = [];
+        for (let i = 0; i < count; i += 1) {
+          list.push({
+            delay: 4.15 + i * 0.16 + p.random(0, 0.38),
+            duration: p.random(6.4, 9.2),
+            angle: (i / count) * p.TWO_PI + p.random(-0.36, 0.36),
+            radius: p.random(100, Math.min(p.width, p.height) * 0.43),
+            size: p.random(0.65, 1.17),
+            phase: p.random(p.TWO_PI),
+          });
+        }
+        return list;
+      }
+
+      function buildWordDrops() {
+        const chars = [...buildFullText()].filter((char) => /\S/.test(char));
+        const maxDrops = p.width < 680 ? 300 : 540;
+        const desired = Math.min(maxDrops, Math.max(110, chars.length * 2 + collageWords.length * 2));
+        const list = [];
+        const span = Math.max(1, desired - 1);
+        let charIndex = 0;
+        for (let i = 0; i < desired; i += 1) {
+          const u = i / span;
+          const useWord = collageWords.length > 0 && i % 7 === 3;
+          const raw = useWord ? collageWords[i % collageWords.length] : chars[charIndex % Math.max(1, chars.length)] || "x";
+          if (!useWord) charIndex += 1;
+          const text = stylizeFragment(raw, i, useWord);
+          const streamX = p.width * 0.36
+            + Math.sin(u * p.TWO_PI * 1.35) * p.width * 0.055
+            + Math.sin(u * p.TWO_PI * 6.2) * p.width * 0.018;
+          const targetX = streamX + p.random(-36, 36) * (p.width < 680 ? 0.65 : 1);
+          const targetY = waterY - 8
+            + Math.sin(u * p.TWO_PI * 2.35) * p.height * 0.036
+            + p.random(-9, 14);
+          list.push({
+            text,
+            index: i,
+            isWord: useWord,
+            start: 7.0 + u * 9.6 + p.random(0, 0.95),
+            duration: p.random(4.5, 7.4),
+            startX: targetX + p.random(-p.width * 0.085, p.width * 0.085),
+            startY: p.random(-p.height * 0.5, -24) - u * p.height * 0.16,
+            targetX,
+            targetY,
+            size: useWord ? p.random(7, 15) : p.random(12, 29),
+            sway: p.random(8, 31),
+            phase: p.random(p.TWO_PI),
+            font: i % 5 === 0 ? "Times New Roman" : i % 3 === 0 ? "Courier New" : "Georgia",
+            bold: useWord || i % 11 === 0,
+            rotation: p.random(-0.38, 0.38),
+            symbolSeed: Math.floor(p.random(fragmentColors.length)),
+            impacted: false,
+          });
+        }
+        return list;
+      }
+
+      function stylizeFragment(raw, index, isWord) {
+        const text = String(raw || "").trim();
+        if (!text) return "";
+        if (!isWord) return index % 8 === 0 ? text.toUpperCase() : text;
+        const clipped = text.length > 12 ? text.slice(0, 12) : text;
+        return index % 5 === 0 ? clipped.toUpperCase() : clipped;
+      }
+
+      function buildBirds() {
+        const count = p.width < 680 ? 20 : 38;
+        const list = [];
+        for (let i = 0; i < count; i += 1) {
+          list.push({
+            delay: 24.4 + p.random(0, 2.8),
+            duration: p.random(6.1, 8.8),
+            lane: i / Math.max(1, count - 1),
+            size: p.random(8, 18),
+            phase: p.random(p.TWO_PI),
+            color: p.random() > 0.3 ? palette.paperLight : [216, 202, 158],
+          });
+        }
+        return list;
+      }
+
+      function buildFinalLetterLayout() {
+        const paperW = Math.min(p.width * 0.86, 670);
+        const paperH = Math.min(p.height * 0.78, 540);
+        const x = (p.width - paperW) / 2;
+        const y = Math.max(24, (p.height - paperH) / 2);
+        const padding = Math.max(22, Math.min(44, paperW * 0.078));
+        let baseSize = Math.min(20, Math.max(11, p.width / 48));
+        let lines = [];
+
+        while (baseSize >= 9) {
+          lines = [];
+          const textWidth = paperW - padding * 2;
+          const sections = [
+            {
+              text: plaintext.recipient ? `To ${plaintext.recipient}` : "",
+              size: baseSize * 0.82,
+              role: "recipient",
+              font: "Courier New",
+              bold: true,
+            },
+            {
+              text: plaintext.title || "Untitled letter",
+              size: baseSize * 1.34,
+              role: "title",
+              font: "Times New Roman",
+              bold: true,
+            },
+            { text: "", size: baseSize, role: "gap", font: "Georgia", bold: false },
+            { text: plaintext.message || "", size: baseSize, role: "message", font: "Georgia", bold: false },
+          ];
+          sections.forEach((section) => {
+            if (!section.text) {
+              lines.push({ text: "", size: section.size, role: section.role, font: section.font, bold: section.bold });
+              return;
+            }
+            p.textFont(section.font);
+            p.textStyle(section.bold ? p.BOLD : p.NORMAL);
+            p.textSize(section.size);
+            wrapText(section.text, textWidth).forEach((line) => {
+              lines.push({ text: line, size: section.size, role: section.role, font: section.font, bold: section.bold });
+            });
+          });
+          const height = lines.reduce((sum, line) => sum + line.size * (line.role === "gap" ? 0.86 : 1.42), 0);
+          if (height <= paperH - padding * 2 || baseSize <= 9) break;
+          baseSize -= 1;
+        }
+
+        const glyphs = [];
+        let cursorY = y + padding;
+        let order = 0;
+        const maxY = y + paperH - padding * 0.62;
+        lines.forEach((line) => {
+          const lineHeight = line.size * (line.role === "gap" ? 0.86 : 1.42);
+          if (cursorY + lineHeight > maxY) return;
+          p.textFont(line.font);
+          p.textStyle(line.bold ? p.BOLD : p.NORMAL);
+          p.textSize(line.size);
+          let cursorX = x + padding;
+          [...line.text].forEach((char) => {
+            const width = p.textWidth(char || " ");
+            glyphs.push({
+              char,
+              x: cursorX,
+              y: cursorY,
+              size: line.size,
+              role: line.role,
+              font: line.font,
+              bold: line.bold || (line.role === "message" && /[A-Z]/.test(char) && order % 19 === 0),
+              order,
+            });
+            order += 1;
+            cursorX += width;
+          });
+          cursorY += lineHeight;
+        });
+        p.textStyle(p.NORMAL);
+
+        return { x, y, w: paperW, h: paperH, padding, glyphs };
+      }
+
+      function wrapText(text, maxWidth) {
+        const lines = [];
+        String(text || "").split("\n").forEach((paragraph) => {
+          if (!paragraph.trim()) {
+            lines.push("");
+            return;
+          }
+          const hasSpaces = /\s/.test(paragraph);
+          const tokens = hasSpaces ? paragraph.split(/\s+/) : [...paragraph];
+          let line = "";
+          tokens.forEach((token) => {
+            const next = hasSpaces ? `${line}${line ? " " : ""}${token}` : `${line}${token}`;
+            if (p.textWidth(next) <= maxWidth || !line) {
+              line = next;
+            } else {
+              lines.push(line);
+              line = token;
+            }
+          });
+          if (line) lines.push(line);
+        });
+        return lines;
+      }
+
+      function drawStoryBackground(t) {
+        const dawn = smoothstep(23.5, 33.5, t);
+        const ctx = p.drawingContext;
+        const top = mixColor(palette.night, [82, 83, 85], dawn * 0.58);
+        const mid = mixColor(palette.midnight, [150, 145, 122], dawn * 0.72);
+        const bottom = mixColor([19, 24, 34], [220, 203, 156], dawn);
+        const gradient = ctx.createLinearGradient(0, 0, p.width, p.height);
+        gradient.addColorStop(0, rgba(top[0], top[1], top[2], 1));
+        gradient.addColorStop(0.48, rgba(mid[0], mid[1], mid[2], 1));
+        gradient.addColorStop(1, rgba(bottom[0], bottom[1], bottom[2], 1));
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, p.width, p.height);
+
+        p.noStroke();
+        p.fill(6, 9, 17, 68 * (1 - dawn));
+        p.rect(0, 0, p.width, p.height);
+        drawFog(t, dawn);
+        drawPaperFibers(0.62 + dawn * 0.44);
+      }
+
+      function drawFog(t, dawn) {
+        p.noStroke();
+        fogBands.forEach((band, index) => {
+          const x = ((t * band.speed * 42 + band.phase * 70 + index * 97) % (p.width + band.width)) - band.width * 0.5;
+          const alpha = 10 + dawn * 18;
+          p.fill(207, 202, 181, alpha);
+          p.ellipse(x, band.y + Math.sin(t * 0.15 + band.phase) * 9, band.width, band.height);
+        });
+      }
+
+      function drawPaperFibers(alphaScale) {
+        p.push();
+        p.noFill();
+        paperFibers.forEach((fiber) => {
+          const color = fiber.warm ? palette.paperDeep : [142, 154, 155];
+          p.stroke(color[0], color[1], color[2], fiber.alpha * alphaScale);
+          p.strokeWeight(fiber.weight);
+          const dx = Math.cos(fiber.angle) * fiber.length;
+          const dy = Math.sin(fiber.angle) * fiber.length;
+          p.line(fiber.x, fiber.y, fiber.x + dx, fiber.y + dy);
+        });
+        p.pop();
+      }
+
+      function drawMoonAndStars(t) {
+        const dawn = smoothstep(23.5, 33.5, t);
+        p.push();
+        staticStars.forEach((star) => {
+          const twinkle = 0.68 + Math.sin(t * 0.92 + star.phase) * 0.32;
+          const color = star.warm ? palette.paperLight : [190, 206, 207];
+          p.noStroke();
+          p.fill(color[0], color[1], color[2], star.alpha * twinkle * (1 - dawn * 0.72));
+          p.circle(star.x, star.y, star.r * 2);
+        });
+        p.pop();
+
+        const moonX = p.width * 0.82;
+        const moonY = p.height * 0.15;
+        const moonFade = 1 - smoothstep(27, 34, t);
+        if (moonFade <= 0) return;
+        p.push();
+        drawGlow(moonX, moonY, 76, palette.paperLight, 16 * moonFade);
+        p.noStroke();
+        p.fill(245, 240, 221, 205 * moonFade);
+        p.circle(moonX, moonY, 32);
+        p.fill(15, 24, 45, 218 * moonFade);
+        p.circle(moonX + 11, moonY - 2, 32);
+        p.pop();
+      }
+
+      function drawEnvelope(t) {
+        const appear = 1 - smoothstep(4.65, 5.85, t);
+        if (appear <= 0) return;
+        const open = smoothstep(0.6, 2.35, t);
+        const lift = smoothstep(1.7, 3.45, t);
+        const cx = p.width * 0.5;
+        const cy = p.height * 0.57 - lift * p.height * 0.21;
+        const w = Math.min(216, p.width * 0.36);
+        const h = w * 0.58;
+
+        p.push();
+        p.translate(cx, cy);
+        p.noStroke();
+        p.fill(0, 0, 0, 44 * appear);
+        p.rect(-w / 2 + 9, -h / 2 + 10, w, h, 5);
+        drawPaperRect(-w / 2, -h / 2, w, h, 5, appear);
+        p.stroke(88, 79, 60, 118 * appear);
+        p.strokeWeight(1.1);
+        p.line(-w / 2, -h / 2, 0, 6);
+        p.line(w / 2, -h / 2, 0, 6);
+        p.line(-w / 2, h / 2, -8, 2);
+        p.line(w / 2, h / 2, 8, 2);
+        p.noStroke();
+        p.fill(239, 232, 211, 205 * appear);
+        p.beginShape();
+        p.vertex(-w / 2, -h / 2);
+        p.vertex(0, -h / 2 - open * 70);
+        p.vertex(w / 2, -h / 2);
+        p.vertex(0, 6);
+        p.endShape(p.CLOSE);
+        p.stroke(92, 84, 68, 72 * appear);
+        p.line(-w / 2, -h / 2, 0, -h / 2 - open * 70);
+        p.line(w / 2, -h / 2, 0, -h / 2 - open * 70);
+        p.noStroke();
+        p.fill(116, 48, 45, 188 * appear);
+        p.circle(0, 7, 24);
+        p.fill(218, 190, 119, 130 * open * appear);
+        p.circle(0, 7, 9 + open * 3);
+        p.pop();
+      }
+
+      function drawLaceBloom(t) {
+        const bloom = smoothstep(2.0, 7.15, t);
+        const fade = 1 - smoothstep(11.4, 14.3, t);
+        if (bloom <= 0 || fade <= 0) return;
+        const cx = p.width * 0.5;
+        const cy = p.height * 0.32 + Math.sin(t * 0.42) * 4;
+        const scale = Math.min(p.width, p.height) / 620;
+        const tremor = Math.sin(t * 5.6) * 0.018 + Math.sin(t * 3.1) * 0.014;
+
+        p.push();
+        p.translate(cx, cy);
+        p.rotate(Math.sin(t * 0.18) * 0.08 + tremor);
+        p.scale(scale);
+        drawGlow(0, 0, 238 * bloom, palette.lace, 13 * fade);
+
+        for (let ring = 4; ring >= 0; ring -= 1) {
+          const petals = 6 + ring * 2;
+          const ringBloom = p.constrain((bloom - ring * 0.075) / 0.62, 0, 1);
+          const depth = p.map(ring, 0, 4, 0.55, 1);
+          for (let i = 0; i < petals; i += 1) {
+            const breeze = Math.sin(t * (1.35 + ring * 0.08) + i * 1.7) * 0.045;
+            const angle = (i / petals) * p.TWO_PI + ring * 0.31 + breeze;
+            const length = p.lerp(24, 82 + ring * 19, ringBloom) * depth;
+            const width = p.lerp(10, 30 + ring * 7, ringBloom) * depth;
+            const offset = ring * 10 * ringBloom;
+            drawLacePetal(angle, offset, length, width, ring, i, fade, ringBloom);
+          }
+        }
+
+        drawBloomThreads(fade, bloom, t);
+        p.noStroke();
+        p.fill(238, 236, 226, 156 * fade);
+        p.circle(0, 0, 24 * bloom);
+        p.fill(196, 165, 99, 96 * fade);
+        p.circle(0, 0, 8 * bloom);
+        p.pop();
+      }
+
+      function drawLacePetal(angle, offset, length, width, ring, index, alpha, bloom) {
+        p.push();
+        p.rotate(angle);
+        p.translate(offset, 0);
+        p.rotate(Math.sin(index + ring) * 0.18 * (1 - bloom));
+        const rich = p.map(ring, 0, 4, 0.48, 1);
+        p.fill(236, 234, 224, (22 + rich * 26) * alpha);
+        p.stroke(239, 237, 229, (86 + rich * 26) * alpha);
+        p.strokeWeight(1.05);
+        p.beginShape();
+        p.vertex(0, 0);
+        p.bezierVertex(length * 0.17, -width * 0.98, length * 0.76, -width * 0.76, length, 0);
+        p.bezierVertex(length * 0.76, width * 0.76, length * 0.17, width * 0.98, 0, 0);
+        p.endShape(p.CLOSE);
+
+        const ctx = p.drawingContext;
+        ctx.save();
+        ctx.setLineDash([1.6, 3.4]);
+        p.noFill();
+        p.stroke(250, 247, 236, 72 * alpha);
+        p.strokeWeight(0.72);
+        for (let i = 1; i <= 5; i += 1) {
+          const u = i / 6;
+          p.arc(length * (0.14 + u * 0.13), 0, width * (0.9 + u), width * (0.34 + u * 0.18), -0.92, 0.92);
+          p.line(length * 0.08, 0, length * (0.24 + u * 0.62), Math.sin(i + ring) * width * 0.34);
+        }
+        ctx.restore();
+
+        p.stroke(255, 252, 240, 56 * alpha);
+        p.strokeWeight(1);
+        for (let i = 0; i < 9; i += 1) {
+          const u = (i + 0.5) / 9;
+          p.point(length * u, Math.sin(u * Math.PI * 6 + ring) * width * 0.36);
+        }
+        p.pop();
+      }
+
+      function drawBloomThreads(alpha, bloom, t) {
+        p.stroke(232, 229, 216, 74 * alpha);
+        p.strokeWeight(0.65);
+        for (let i = 0; i < 12; i += 1) {
+          const angle = -p.PI * 0.88 + (i / 11) * p.PI * 0.76;
+          const x = Math.cos(angle) * (46 + i * 4) * bloom;
+          const y = Math.sin(angle) * 28 * bloom + 68 * bloom;
+          const dangle = Math.sin(t * 2 + i) * 2.2;
+          p.line(x, y - 28, x + dangle, y + 20);
+          p.noStroke();
+          p.fill(232, 229, 216, 102 * alpha);
+          p.ellipse(x + dangle, y + 23, 4, 7);
+          p.stroke(232, 229, 216, 74 * alpha);
+        }
+      }
+
+      function drawButterflies(t) {
+        butterflies.forEach((butterfly) => {
+          const local = p.constrain((t - butterfly.delay) / butterfly.duration, 0, 1);
+          if (local <= 0 || local >= 1) return;
+          const rise = easeOutCubic(local);
+          const cx = p.width * 0.5;
+          const cy = p.height * 0.32;
+          const angle = butterfly.angle + rise * p.TWO_PI * 1.2;
+          const radius = butterfly.radius * rise;
+          const x = cx + Math.cos(angle) * radius;
+          const y = cy + Math.sin(angle) * radius * 0.58 - rise * p.height * 0.2;
+          const alpha = Math.sin(local * Math.PI);
+          drawButterfly(x, y, butterfly.size * (0.82 + rise * 0.52), angle, alpha, t + butterfly.phase);
+        });
+      }
+
+      function drawButterfly(x, y, scale, angle, alpha, wingT) {
+        const flap = 0.76 + Math.sin(wingT * 9.2) * 0.24;
+        p.push();
+        p.translate(x, y);
+        p.rotate(angle * 0.18);
+        p.scale(scale);
+        p.stroke(11, 14, 16, 145 * alpha);
+        p.strokeWeight(1.2);
+        p.fill(palette.blueWing[0], palette.blueWing[1], palette.blueWing[2], 136 * alpha);
+        drawWing(-1, flap);
+        drawWing(1, flap);
+        p.noFill();
+        p.stroke(235, 232, 218, 92 * alpha);
+        p.strokeWeight(0.55);
+        for (let i = -2; i <= 2; i += 1) {
+          p.line(i * 7, -20, i * 4, 22);
+          p.line(-28, i * 6, 28, i * 5);
+        }
+        p.stroke(13, 15, 16, 170 * alpha);
+        p.strokeWeight(1.1);
+        p.line(0, -9, 0, 15);
+        p.line(0, -8, -7, -16);
+        p.line(0, -8, 7, -16);
+        p.pop();
+      }
+
+      function drawWing(side, flap) {
+        p.beginShape();
+        p.vertex(0, -3);
+        p.bezierVertex(side * 14 * flap, -24, side * 36 * flap, -16, side * 23, 2);
+        p.bezierVertex(side * 17, 11, side * 8, 9, 0, 3);
+        p.endShape(p.CLOSE);
+        p.beginShape();
+        p.vertex(0, 4);
+        p.bezierVertex(side * 12 * flap, 13, side * 30 * flap, 20, side * 11, 25);
+        p.bezierVertex(side * 4, 20, side * 2, 13, 0, 4);
+        p.endShape(p.CLOSE);
+        p.noFill();
+        p.line(0, 0, side * 22 * flap, -4);
+        p.line(0, 5, side * 16 * flap, 16);
+        p.fill(palette.blueWing[0], palette.blueWing[1], palette.blueWing[2], 116);
+      }
+
+      function drawWaterStage(t) {
+        const appear = smoothstep(5.7, 8.25, t);
+        if (appear <= 0) return;
+        const dawn = smoothstep(23.5, 33.5, t);
+        const ctx = p.drawingContext;
+        const gradient = ctx.createLinearGradient(0, waterY - 92, 0, p.height);
+        gradient.addColorStop(0, rgba(22, 28, 38, 0));
+        gradient.addColorStop(0.2, rgba(64, 74, 83, 0.16 * appear));
+        gradient.addColorStop(0.58, rgba(15 + dawn * 80, 25 + dawn * 80, 42 + dawn * 65, 0.56 * appear));
+        gradient.addColorStop(1, rgba(7 + dawn * 110, 12 + dawn * 90, 22 + dawn * 45, 0.82 * appear));
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, waterY - 100, p.width, p.height - waterY + 100);
+
+        p.push();
+        p.noFill();
+        for (let i = 0; i < 10; i += 1) {
+          p.stroke(218, 208, 176, (16 - i * 0.9) * appear);
+          p.strokeWeight(i % 3 === 0 ? 1.1 : 0.7);
+          p.beginShape();
+          for (let x = -24; x <= p.width + 24; x += 26) {
+            const y = waterY + Math.sin(x * 0.013 + t * 0.48 + i) * (2.5 + i * 1.2) + i * 7.2;
+            p.curveVertex(x, y);
+          }
+          p.endShape();
+        }
+        p.stroke(28, 29, 26, 34 * appear);
+        for (let i = 0; i < 18; i += 1) {
+          const y = waterY + 16 + i * 9;
+          p.line(0, y + Math.sin(t + i) * 1.4, p.width, y + Math.cos(t * 0.5 + i) * 1.4);
+        }
+        p.pop();
+      }
+
+      function drawTypographicCascade(t) {
+        const active = smoothstep(7.0, 10.2, t) * (1 - smoothstep(22.3, 25.0, t));
+        if (active <= 0) return;
+        const centerX = p.width * 0.35;
+        p.push();
+        p.noFill();
+        for (let band = -5; band <= 5; band += 1) {
+          const widthAlpha = 22 - Math.abs(band) * 2.6;
+          p.stroke(7, 8, 8, widthAlpha * active);
+          p.strokeWeight(3.2 - Math.abs(band) * 0.18);
+          p.beginShape();
+          for (let y = -20; y <= waterY + 48; y += 34) {
+            const x = centerX
+              + Math.sin(y * 0.014 + t * 0.22 + band) * 42
+              + band * 8
+              + Math.sin(y * 0.041 + band) * 7;
+            p.curveVertex(x, y);
+          }
+          p.endShape();
+        }
+
+        p.textAlign(p.LEFT, p.CENTER);
+        p.textFont("Times New Roman");
+        p.textStyle(p.NORMAL);
+        for (let row = 0; row < 60; row += 1) {
+          const y = -20 + row * 13 + ((t * 12 + row * 3) % 13);
+          if (y > waterY + 35) continue;
+          const side = row % 2 === 0 ? -1 : 1;
+          const x = centerX
+            + Math.sin(row * 0.72 + t * 0.2) * 38
+            + side * (34 + (row % 5) * 12);
+          const word = collageWords[row % collageWords.length];
+          p.textSize(5.5 + (row % 4) * 0.8);
+          p.fill(row % 3 === 0 ? 236 : 16, row % 3 === 0 ? 231 : 18, row % 3 === 0 ? 214 : 18, (row % 3 === 0 ? 80 : 92) * active);
+          p.text(row % 6 === 0 ? word.toUpperCase() : word, x, y);
+        }
+
+        p.stroke(240, 235, 216, 38 * active);
+        p.strokeWeight(0.85);
+        for (let i = 0; i < 21; i += 1) {
+          const x = centerX - 54 + i * 5.4 + Math.sin(t * 0.34 + i) * 7;
+          p.line(x, 0, x + Math.sin(i) * 15, waterY - 14);
+        }
+        p.pop();
+      }
+
+      function drawWordRain(t) {
+        const rainAppear = smoothstep(6.45, 9.1, t);
+        if (rainAppear <= 0) return;
+        p.push();
+        wordDrops.forEach((drop) => {
+          const local = p.constrain((t - drop.start) / drop.duration, 0, 1);
+          if (local <= 0) return;
+          if (local < 1) {
+            const fall = easeInOutCubic(local);
+            const x = p.lerp(drop.startX, drop.targetX, fall)
+              + Math.sin(t * 1.04 + drop.phase) * drop.sway * (1 - fall * 0.68);
+            const y = p.lerp(drop.startY, drop.targetY, fall);
+            drawRainThread(x, y, drop, fall, rainAppear);
+            drawConstellationFragment(x, y, drop, 1 - fall * 0.14, rainAppear);
+          } else {
+            if (!drop.impacted) {
+              drop.impacted = true;
+              ripples.push({ x: drop.targetX, y: drop.targetY, born: t, strength: p.random(0.72, 1.22) });
+              if (t - lastChimeAt > 0.075 && chimeCount < 70) {
+                lastChimeAt = t;
+                chimeCount += 1;
+                playWaterChime(0.34, p.map(drop.targetX, 0, p.width, -0.7, 0.7));
+              }
+            }
+            drawSettledOrLiftedDrop(drop, t);
+          }
+        });
+        p.textStyle(p.NORMAL);
+        p.pop();
+      }
+
+      function drawRainThread(x, y, drop, fall, alpha) {
+        p.push();
+        p.stroke(225, 220, 203, 42 * alpha * (1 - fall * 0.12));
+        p.strokeWeight(drop.isWord ? 0.55 : 0.72);
+        p.line(x, Math.max(0, y - 132), x + Math.sin(drop.phase) * 5, y - 8);
+        p.stroke(18, 19, 18, 28 * alpha);
+        p.line(x + 1.5, Math.max(0, y - 116), x + Math.sin(drop.phase) * 4, y - 6);
+        p.pop();
+      }
+
+      function drawConstellationFragment(x, y, drop, scale, alpha) {
+        p.push();
+        p.translate(x, y);
+        p.rotate(drop.rotation * 0.35);
+        p.scale(scale);
+        drawGlow(0, 0, drop.size * 1.9, palette.paperLight, 8 * alpha);
+        p.textFont(drop.font);
+        p.textStyle(drop.bold ? p.BOLD : p.NORMAL);
+        p.textAlign(p.CENTER, p.CENTER);
+        p.textSize(drop.size);
+        p.noStroke();
+        p.fill(5, 6, 7, 88 * alpha);
+        p.text(drop.text, 1.4, 1.7);
+        p.fill(242, 236, 217, 220 * alpha);
+        p.text(drop.text, 0, 0);
+
+        const symbols = ["*", "o", ".", "+"];
+        for (let i = 0; i < 4; i += 1) {
+          const angle = drop.phase + i * 1.55;
+          const radius = drop.size * (0.42 + (i % 3) * 0.2);
+          const sx = Math.cos(angle) * radius;
+          const sy = Math.sin(angle) * radius;
+          const color = fragmentColors[(drop.symbolSeed + i) % fragmentColors.length];
+          p.fill(color[0], color[1], color[2], 112 * alpha);
+          if (i % 2 === 0) {
+            drawTinyMoon(sx, sy, 2.4);
+          } else {
+            p.textStyle(p.NORMAL);
+            p.textSize(5.5);
+            p.text(symbols[(drop.symbolSeed + i) % symbols.length], sx, sy);
+          }
+        }
+        p.textStyle(p.NORMAL);
+        p.pop();
+      }
+
+      function drawSettledOrLiftedDrop(drop, t) {
+        const lift = smoothstep(22.05, 26.15, t);
+        if (lift <= 0) {
+          const pulse = 0.58 + Math.sin(t * 2.3 + drop.phase) * 0.25;
+          p.push();
+          p.translate(drop.targetX, drop.targetY + Math.sin(t + drop.phase) * 1.8);
+          p.rotate(drop.rotation);
+          p.textFont(drop.font);
+          p.textStyle(drop.bold ? p.BOLD : p.NORMAL);
+          p.textAlign(p.CENTER, p.CENTER);
+          p.textSize(drop.isWord ? drop.size * 0.92 : Math.min(18, drop.size * 0.72));
+          p.fill(10, 11, 10, (drop.isWord ? 72 : 56) * pulse);
+          p.text(drop.text, 0, -4);
+          p.noStroke();
+          p.fill(224, 209, 159, 52 * pulse);
+          p.circle(0, 2, drop.isWord ? 2.1 : 2.8);
+          p.textStyle(p.NORMAL);
+          p.pop();
+          return;
+        }
+
+        if (lift < 1 && drop.index % 2 === 0) {
+          const plane = airplanePoint(t);
+          const delay = (drop.index % 64) / 64;
+          const local = p.constrain((lift - delay * 0.45) / 0.72, 0, 1);
+          if (local <= 0) return;
+          const curve = Math.sin(local * Math.PI) * p.height * 0.2;
+          const x = p.lerp(drop.targetX, plane.x - 42 + Math.sin(drop.phase) * 32, local);
+          const y = p.lerp(drop.targetY, plane.y + Math.cos(drop.phase) * 22, local) - curve;
+          p.push();
+          p.stroke(220, 202, 151, 38 * (1 - local));
+          p.strokeWeight(0.85);
+          p.line(drop.targetX, drop.targetY, x, y);
+          p.noStroke();
+          p.fill(242, 236, 218, 154 * (1 - local * 0.35));
+          p.circle(x, y, 2.7 * (1 - local * 0.45));
+          p.pop();
+        }
+      }
+
+      function drawRipples(t) {
+        ripples = ripples.filter((ripple) => t - ripple.born < 6.4);
+        if (!ripples.length) return;
+        p.push();
+        p.noFill();
+        ripples.forEach((ripple) => {
+          const age = t - ripple.born;
+          const fade = Math.max(0, 1 - age / 6.4);
+          for (let i = 0; i < 3; i += 1) {
+            const radius = (age * 23 + i * 17) * ripple.strength;
+            p.stroke(225, 205, 145, 34 * fade * (1 - i * 0.18));
+            p.strokeWeight(0.92);
+            p.ellipse(ripple.x, ripple.y, radius * 2.65, radius * 0.5);
+            p.stroke(21, 22, 20, 14 * fade);
+            p.ellipse(ripple.x + 1, ripple.y + 1, radius * 2.45, radius * 0.44);
+          }
+        });
+        p.pop();
+      }
+
+      function drawMemoryThreads(t) {
+        const active = smoothstep(14, 20.2, t) * (1 - smoothstep(25.4, 29, t));
+        if (active <= 0) return;
+        const points = wordDrops.filter((drop) => drop.impacted && drop.index % 12 === 0);
+        p.push();
+        p.noFill();
+        for (let i = 1; i < points.length; i += 1) {
+          const a = points[i - 1];
+          const b = points[i];
+          p.stroke(216, 197, 142, 19 * active);
+          p.strokeWeight(0.72);
+          p.line(a.targetX, a.targetY, b.targetX, b.targetY);
+        }
+        p.pop();
+      }
+
+      function drawBoatPlaneAndBirds(t) {
+        if (t < 8.6) return;
+        const boat = boatPoint(t);
+        const tremble = recentRippleTremble(t, boat.x);
+        const fold = smoothstep(19.9, 22.35, t);
+        const takeoff = smoothstep(22.05, 26.2, t);
+
+        if (takeoff <= 0.02) {
+          drawBoatPlaneMorph(boat.x, boat.y + tremble, fold, t);
+        } else if (takeoff < 1) {
+          const plane = airplanePoint(t);
+          drawLiftTrails(plane, t);
+          drawPaperAirplane(plane.x, plane.y, plane.angle, 1.0, 232);
+        }
+
+        drawBirds(t);
+      }
+
+      function boatPoint(t) {
+        const u = smoothstep(8.5, 19.9, t);
+        return {
+          x: p.lerp(p.width * 0.09, p.width * 0.64, u),
+          y: waterY + 23 + Math.sin(t * p.TWO_PI * 0.58) * 3,
+        };
+      }
+
+      function airplanePoint(t) {
+        const u = smoothstep(22.05, 26.6, t);
+        const x0 = p.width * 0.64;
+        const y0 = waterY + 8;
+        const x1 = p.width * 0.54;
+        const y1 = p.height * 0.31;
+        const x2 = p.width * 0.86;
+        const y2 = p.height * 0.19;
+        const x = quadratic(x0, x1, x2, u);
+        const y = quadratic(y0, y1, y2, u);
+        const dx = quadraticDerivative(x0, x1, x2, u);
+        const dy = quadraticDerivative(y0, y1, y2, u);
+        return { x, y, angle: Math.atan2(dy, dx) };
+      }
+
+      function recentRippleTremble(t, x) {
+        let tremble = 0;
+        ripples.forEach((ripple) => {
+          const age = t - ripple.born;
+          const reach = age * 35 + 42;
+          const influence = Math.max(0, 1 - Math.abs(x - ripple.x) / reach) * Math.max(0, 1 - age / 4.4);
+          tremble += Math.sin(age * 9.2) * influence * 3.4;
+        });
+        return tremble;
+      }
+
+      function drawBoatPlaneMorph(x, y, fold, t) {
+        p.push();
+        p.translate(x, y);
+        p.fill(245, 240, 224, 30);
+        p.stroke(244, 239, 221, 220);
+        p.strokeWeight(1.35);
+        if (fold < 0.02) {
+          const w = 43;
+          p.noFill();
+          p.line(-w / 2, 0, -w * 0.18, 13);
+          p.line(-w * 0.18, 13, w * 0.16, 13);
+          p.line(w * 0.16, 13, w / 2, 0);
+          p.line(-w / 2, 0, 0, -18);
+          p.line(0, -18, w / 2, 0);
+          p.line(-w * 0.18, 13, 0, 0);
+          p.line(0, 0, w * 0.16, 13);
+          p.stroke(30, 29, 25, 50);
+          p.line(-w * 0.18, 14, w * 0.16, 14);
+        } else {
+          const wing = p.lerp(22, 48, fold);
+          const nose = p.lerp(-3, 44, fold);
+          const tail = p.lerp(-22, -28, fold);
+          p.fill(245, 240, 224, 52 + fold * 16);
+          p.beginShape();
+          p.vertex(tail, -5);
+          p.vertex(nose, 0);
+          p.vertex(tail, 12);
+          p.vertex(-7, 1 + Math.sin(t * 3) * 1.1);
+          p.endShape(p.CLOSE);
+          p.line(-7, 1, tail + 8, -11);
+          p.line(-7, 1, tail + 8, 18);
+          p.line(-7, 1, wing * 0.45, 0);
+        }
+        p.pop();
+      }
+
+      function drawPaperAirplane(x, y, angle, scale, alpha) {
+        p.push();
+        p.translate(x, y);
+        p.rotate(angle);
+        p.scale(scale);
+        p.noStroke();
+        p.fill(0, 0, 0, alpha * 0.16);
+        p.beginShape();
+        p.vertex(-29, -8);
+        p.vertex(40, 4);
+        p.vertex(-29, 19);
+        p.vertex(-10, 4);
+        p.endShape(p.CLOSE);
+        p.stroke(244, 239, 221, alpha);
+        p.strokeWeight(1.28);
+        p.fill(244, 239, 221, alpha * 0.22);
+        p.beginShape();
+        p.vertex(-30, -10);
+        p.vertex(42, 0);
+        p.vertex(-30, 17);
+        p.vertex(-9, 2);
+        p.endShape(p.CLOSE);
+        p.line(-9, 2, -28, -10);
+        p.line(-9, 2, -25, 19);
+        p.line(-9, 2, 42, 0);
+        p.stroke(28, 27, 24, alpha * 0.28);
+        p.line(-6, 4, 28, 0);
+        p.pop();
+      }
+
+      function drawLiftTrails(plane, t) {
+        p.push();
+        p.noFill();
+        for (let i = 0; i < 7; i += 1) {
+          p.stroke(218, 197, 139, 42 - i * 4);
+          p.strokeWeight(0.9);
+          p.beginShape();
+          p.curveVertex(plane.x - i * 18, plane.y + Math.sin(t + i) * 10);
+          p.curveVertex(plane.x - i * 27, plane.y + 17 + i * 6);
+          p.curveVertex(plane.x - i * 48, waterY - i * 4);
+          p.curveVertex(plane.x - i * 80, waterY + 24 + Math.sin(i) * 9);
+          p.endShape();
+        }
+        p.pop();
+      }
+
+      function drawCityscapeMusic(t) {
+        const appear = smoothstep(24.05, 29.4, t);
+        if (appear <= 0) return;
+        p.push();
+        p.noFill();
+        p.stroke(226, 211, 166, 54 * appear);
+        p.strokeWeight(0.95);
+        for (let staff = 0; staff < 5; staff += 1) {
+          p.beginShape();
+          for (let x = -24; x < p.width + 48; x += 34) {
+            const y = p.height * 0.4 + staff * 15 + Math.sin(x * 0.014 + t * 0.22) * 17;
+            p.curveVertex(x, y);
+          }
+          p.endShape();
+        }
+
+        const baseY = p.height * 0.8;
+        cityPieces.forEach((piece, index) => {
+          const rise = smoothstep(24.05 + index * 0.05, 28.1 + index * 0.04, t);
+          if (rise <= 0) return;
+          const y = p.lerp(baseY + 30, piece.y, rise);
+          drawCityPiece(piece, y, appear * rise, index);
+        });
+
+        p.stroke(31, 30, 27, 70 * appear);
+        p.strokeWeight(1.1);
+        p.line(p.width * 0.04, baseY - 16, p.width * 0.94, baseY - 16);
+        p.line(p.width * 0.05, baseY - 9, p.width * 0.96, baseY - 9);
+        drawTinyTrain(baseY - 26, appear);
+        drawBareTree(p.width * 0.88, baseY - 18, 66, appear);
+        p.pop();
+      }
+
+      function drawCityPiece(piece, y, alpha, index) {
+        const c = piece.color;
+        p.noStroke();
+        p.fill(0, 0, 0, 35 * alpha);
+        p.rect(piece.x + 4, y + 5, piece.w, piece.h, 2);
+        p.fill(c[0], c[1], c[2], 176 * alpha);
+        p.rect(piece.x, y, piece.w, piece.h, 2);
+        p.stroke(26, 25, 23, 72 * alpha);
+        p.strokeWeight(0.85);
+        p.noFill();
+        p.rect(piece.x, y, piece.w, piece.h, 2);
+        if (piece.roof === 1) {
+          p.fill(c[0] * 0.78, c[1] * 0.78, c[2] * 0.78, 150 * alpha);
+          p.triangle(piece.x - 2, y, piece.x + piece.w / 2, y - piece.w * 0.42, piece.x + piece.w + 2, y);
+        } else if (piece.roof === 2) {
+          p.fill(32, 31, 29, 98 * alpha);
+          p.rect(piece.x + piece.w * 0.62, y - 16, piece.w * 0.22, 16);
+        }
+        p.textFont(index % 2 === 0 ? "Courier New" : "Times New Roman");
+        p.textStyle(index % 5 === 0 ? p.BOLD : p.NORMAL);
+        p.textAlign(p.LEFT, p.TOP);
+        p.noStroke();
+        p.fill(24, 24, 22, 84 * alpha);
+        p.textSize(Math.max(5.5, Math.min(9, piece.w / 7)));
+        const word = collageWords[piece.textIndex % collageWords.length];
+        for (let line = 0; line < 5; line += 1) {
+          const yy = y + 8 + line * 11;
+          if (yy > y + piece.h - 8) break;
+          const text = line % 2 === 0 ? word : collageWords[(piece.textIndex + line) % collageWords.length];
+          p.text(text.slice(0, Math.max(3, Math.floor(piece.w / 7))), piece.x + 5, yy);
+        }
+        p.stroke(242, 236, 214, 48 * alpha);
+        p.strokeWeight(0.7);
+        for (let yy = y + 17; yy < y + piece.h - 8; yy += 19) {
+          p.line(piece.x + 5, yy, piece.x + piece.w - 6, yy);
+        }
+        p.textStyle(p.NORMAL);
+      }
+
+      function drawTinyTrain(y, alpha) {
+        p.noStroke();
+        p.fill(33, 33, 31, 76 * alpha);
+        p.rect(p.width * 0.12, y, p.width * 0.24, 15, 2);
+        p.fill(222, 211, 181, 82 * alpha);
+        for (let i = 0; i < 9; i += 1) {
+          p.rect(p.width * 0.13 + i * 18, y + 4, 9, 5);
+        }
+      }
+
+      function drawBareTree(x, y, h, alpha) {
+        p.stroke(24, 24, 22, 88 * alpha);
+        p.strokeWeight(1.1);
+        p.line(x, y, x, y - h);
+        for (let i = 0; i < 10; i += 1) {
+          const yy = y - h * (0.25 + i * 0.065);
+          const side = i % 2 === 0 ? -1 : 1;
+          p.line(x, yy, x + side * (18 + i * 2), yy - (12 + i * 1.5));
+        }
+      }
+
+      function drawBirds(t) {
+        const appear = smoothstep(24.75, 27.1, t);
+        if (appear <= 0) return;
+        birds.forEach((bird, index) => {
+          const local = p.constrain((t - bird.delay) / bird.duration, 0, 1);
+          if (local <= 0 || local >= 1) return;
+          const u = easeInOutCubic(local);
+          const startX = p.width * (0.35 + (index % 6) * 0.036);
+          const startY = p.height * (0.28 + (index % 5) * 0.036);
+          const endX = p.width * (0.74 + bird.lane * 0.2);
+          const endY = p.height * (0.16 + Math.sin(bird.lane * Math.PI) * 0.2);
+          const x = p.lerp(startX, endX, u);
+          const y = p.lerp(startY, endY, u) + Math.sin(t * 2 + bird.phase) * 11;
+          const alpha = Math.sin(local * Math.PI) * 214 * appear;
+          drawOrigamiBird(x, y, bird.size, Math.sin(t + bird.phase) * 0.23, bird.color, alpha, index);
+        });
+      }
+
+      function drawOrigamiBird(x, y, size, tilt, color, alpha, index) {
+        p.push();
+        p.translate(x, y);
+        p.rotate(tilt);
+        p.stroke(18, 18, 16, alpha * 0.48);
+        p.strokeWeight(0.75);
+        p.fill(color[0], color[1], color[2], alpha * 0.22);
+        p.beginShape();
+        p.vertex(0, 0);
+        p.vertex(-size * 1.45, -size * 0.42);
+        p.vertex(-size * 0.28, size * 0.18);
+        p.vertex(0, 0);
+        p.vertex(size * 1.45, -size * 0.42);
+        p.vertex(size * 0.3, size * 0.18);
+        p.endShape();
+        p.stroke(color[0], color[1], color[2], alpha);
+        p.line(-size * 0.28, size * 0.18, 0, size * 0.74);
+        p.line(size * 0.3, size * 0.18, 0, size * 0.74);
+        if (index % 3 === 0) {
+          p.stroke(25, 25, 22, alpha * 0.24);
+          p.line(-size * 0.9, -size * 0.2, size * 0.92, -size * 0.18);
+        }
+        p.pop();
+      }
+
+      function drawDestination(t) {
+        const appear = smoothstep(27.55, 31.4, t);
+        if (appear <= 0) return;
+        const x = p.width * 0.76;
+        const y = p.height * 0.18;
+        p.push();
+        drawGlow(x, y, 120, palette.dawn, 16 * appear);
+        p.noStroke();
+        p.fill(232, 224, 202, 188 * appear);
+        p.rect(x - 112, y - 24, 224, 46, 3);
+        p.fill(20, 20, 18, 42 * appear);
+        p.rect(x - 105, y + 24, 210, 5, 1);
+        p.stroke(38, 35, 29, 88 * appear);
+        p.strokeWeight(0.9);
+        p.noFill();
+        p.rect(x - 103, y - 17, 206, 32, 2);
+        p.noStroke();
+        p.fill(38, 34, 28, 205 * appear);
+        p.textAlign(p.CENTER, p.CENTER);
+        p.textFont("Times New Roman");
+        p.textStyle(p.BOLD);
+        p.textSize(Math.min(24, Math.max(15, p.width / 44)));
+        p.text("Destination of Love", x, y - 1);
+        p.textStyle(p.NORMAL);
+        drawDestinationHouses(x, y + 70, appear);
+        p.pop();
+      }
+
+      function drawDestinationHouses(cx, baseY, alpha) {
+        const houses = [
+          [-70, 28, 42, palette.paperLight],
+          [-28, 24, 54, palette.mutedTeal],
+          [12, 34, 44, palette.paperDeep],
+          [60, 25, 50, palette.rust],
+        ];
+        houses.forEach(([dx, w, h, color], index) => {
+          const x = cx + dx;
+          const y = baseY - h;
+          p.noStroke();
+          p.fill(color[0], color[1], color[2], 132 * alpha);
+          p.rect(x, y, w, h, 2);
+          p.fill(24, 24, 22, 90 * alpha);
+          p.triangle(x - 2, y, x + w / 2, y - 18, x + w + 2, y);
+          p.stroke(32, 31, 28, 70 * alpha);
+          p.line(x + 6, y + 10, x + w - 6, y + 10);
+          p.line(x + 6, y + 22, x + w - 6, y + 22);
+          if (index % 2 === 0) {
+            p.textFont("Courier New");
+            p.textSize(5.5);
+            p.noStroke();
+            p.fill(24, 24, 22, 78 * alpha);
+            p.text(collageWords[index % collageWords.length].slice(0, 6), x + 5, y + h * 0.58);
+          }
+        });
+      }
+
+      function drawFinalLetter(t) {
+        const unfold = smoothstep(30.85, 33.5, t);
+        if (unfold <= 0) return;
+        const cx = finalLayout.x + finalLayout.w / 2;
+        const cy = finalLayout.y + finalLayout.h / 2;
+        p.push();
+        p.translate(cx, cy);
+        p.rotate((1 - unfold) * -0.11);
+        p.scale(0.22 + unfold * 0.78, 0.07 + unfold * 0.93);
+        p.translate(-cx, -cy);
+        drawLetterPaper(unfold);
+        p.pop();
+
+        const revealStart = 33.0;
+        p.push();
+        p.textAlign(p.LEFT, p.TOP);
+        finalLayout.glyphs.forEach((glyph) => {
+          const local = smoothstep(revealStart + glyph.order * 0.017, revealStart + glyph.order * 0.017 + 0.56, t);
+          if (local <= 0) return;
+          const bounce = Math.sin(local * Math.PI) * 6.5;
+          const alpha = 232 * local;
+          p.textFont(glyph.font);
+          p.textStyle(glyph.bold ? p.BOLD : p.NORMAL);
+          p.textSize(glyph.size);
+          if (glyph.role === "recipient") {
+            p.fill(104, 54, 48, alpha);
+          } else if (glyph.role === "title") {
+            p.fill(19, 24, 24, alpha);
+          } else {
+            p.fill(34, 35, 31, alpha);
+          }
+          p.text(glyph.char, glyph.x, glyph.y - bounce);
+        });
+        p.textStyle(p.NORMAL);
+        p.pop();
+      }
+
+      function drawLetterPaper(alpha) {
+        const { x, y, w, h } = finalLayout;
+        p.noStroke();
+        p.fill(0, 0, 0, 54 * alpha);
+        p.rect(x + 11, y + 14, w, h, 5);
+        p.fill(239, 231, 207, 242 * alpha);
+        p.rect(x, y, w, h, 5);
+        p.fill(248, 242, 224, 56 * alpha);
+        p.rect(x + 8, y + 8, w - 16, h - 16, 3);
+        p.stroke(116, 100, 72, 38 * alpha);
+        p.strokeWeight(0.85);
+        for (let lineY = y + finalLayout.padding + 46; lineY < y + h - finalLayout.padding * 0.5; lineY += 27) {
+          p.line(x + finalLayout.padding, lineY, x + w - finalLayout.padding, lineY);
+        }
+        p.noFill();
+        p.stroke(42, 37, 29, 54 * alpha);
+        p.rect(x + 11, y + 11, w - 22, h - 22, 3);
+        p.noStroke();
+        paperFibers.slice(0, 100).forEach((fiber) => {
+          const fx = x + (fiber.x % w);
+          const fy = y + (fiber.y % h);
+          p.fill(fiber.warm ? 162 : 91, fiber.warm ? 139 : 100, fiber.warm ? 91 : 93, fiber.alpha * 0.6 * alpha);
+          p.rect(fx, fy, Math.max(1, fiber.length * 0.28), 0.7);
+        });
+      }
+
+      function drawForegroundGrain(t) {
+        p.push();
+        p.noStroke();
+        for (let i = 0; i < 44; i += 1) {
+          const x = (i * 83 + t * 5.2) % p.width;
+          const y = (i * 47 + Math.sin(t * 0.7 + i) * 11 + p.height) % p.height;
+          const warm = i % 3 !== 0;
+          p.fill(warm ? 225 : 36, warm ? 205 : 37, warm ? 151 : 34, warm ? 13 : 9);
+          p.circle(x, y, 0.8 + (i % 4) * 0.45);
+        }
+        p.pop();
+      }
+
+      function drawTinyMoon(x, y, radius) {
+        p.push();
+        p.noStroke();
+        p.fill(238, 221, 159, 142);
+        p.circle(x, y, radius * 2);
+        p.fill(18, 24, 40, 125);
+        p.circle(x + radius * 0.42, y - radius * 0.08, radius * 2);
+        p.pop();
+      }
+
+      function drawPaperRect(x, y, w, h, radius, alpha) {
+        p.fill(236, 228, 205, 226 * alpha);
+        p.rect(x, y, w, h, radius);
+        p.fill(252, 246, 227, 52 * alpha);
+        p.rect(x + 5, y + 5, w - 10, h - 10, Math.max(1, radius - 2));
+        p.stroke(82, 74, 57, 56 * alpha);
+        p.noFill();
+        p.rect(x, y, w, h, radius);
+      }
+
+      function drawGlow(x, y, radius, color, alpha) {
+        if (alpha <= 0) return;
+        p.noStroke();
+        for (let i = 5; i >= 1; i -= 1) {
+          p.fill(color[0], color[1], color[2], alpha * (0.012 + i * 0.024));
+          p.circle(x, y, radius * i * 0.42);
+        }
+      }
+
+      function mixColor(a, b, t) {
+        return [
+          p.lerp(a[0], b[0], t),
+          p.lerp(a[1], b[1], t),
+          p.lerp(a[2], b[2], t),
+        ];
+      }
+
+      function rgba(r, g, b, a) {
+        return `rgba(${Math.round(r)},${Math.round(g)},${Math.round(b)},${a})`;
+      }
+
+      function smoothstep(edge0, edge1, value) {
+        const x = p.constrain((value - edge0) / (edge1 - edge0), 0, 1);
+        return x * x * (3 - 2 * x);
+      }
+
+      function easeOutCubic(t) {
+        return 1 - Math.pow(1 - t, 3);
+      }
+
+      function easeInOutCubic(t) {
+        return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      }
+
+      function quadratic(a, b, c, t) {
+        return Math.pow(1 - t, 2) * a + 2 * (1 - t) * t * b + t * t * c;
+      }
+
+      function quadraticDerivative(a, b, c, t) {
+        return 2 * (1 - t) * (b - a) + 2 * t * (c - b);
+      }
+    }, el.riverCanvas);
+  }
+
+  function createLegacyRiverSketch(plaintext, onComplete) {
     return new window.p5((p) => {
       const palette = {
         night: [5, 18, 54],

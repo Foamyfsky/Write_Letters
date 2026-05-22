@@ -8,7 +8,7 @@ The app has three phases:
 
 1. Write: collect the recipient, title, access key, key prompt, and message.
 2. Gallery: show the writer's own encrypted letters as hanging envelopes.
-3. Galaxy River Letter: unlock the envelope, bloom a sapphire lace rose, let the real words fall as stardust rain, carry them through a boat/airplane/bird journey, and settle into a readable delivered letter.
+3. Galaxy River Letter: unlock the envelope, bloom a translucent paper-lace flower, let the real words fall through an ink-and-stardust typographic cascade, carry them through a boat/airplane/bird journey, and settle into a readable delivered letter.
 
 Plaintext is not saved to browser storage. Saved and shared letters contain encrypted data only.
 
@@ -82,17 +82,19 @@ This preserves the person-to-person mechanism: the gallery is built from the wri
 The unlock scene is now a longer story-based canvas stage. It is designed around this sequence:
 
 1. The envelope opens after the correct key.
-2. A translucent sapphire-blue lace rose unfolds from a bud into bloom.
-3. Line-art butterflies emerge from the petals and spiral outward.
-4. The scene opens into a midnight-blue word-rain gallery.
-5. Real characters from the recipient, title, and message fall as stardust typography with moon/star details and glass-like rain threads.
-6. The falling characters touch the water, create glowing ripples, and build a connected memory network.
+2. A translucent off-white lace bloom opens with layered petal depth and a slight breeze-like tremor.
+3. Blue sketch butterflies with inked construction lines emerge from the petals and spiral outward.
+4. The scene opens into a midnight-blue editorial gallery with parchment grain, fog, and restrained moonlight.
+5. Real characters and word fragments from the recipient, title, and message fall as newspaper-like typography with moon/star details and glass-like rain threads.
+6. The falling typography touches the water, creates readable ripples, and builds a connected memory network without a blown-out light burst.
 7. A white origami boat crosses the water and trembles with nearby ripples.
 8. The boat folds into a paper airplane, lifts the glowing memories upward, and shifts the palette toward pale gold dawn.
-9. The lifted particles become origami birds moving through a music-sheet cityscape toward "Destination of Love".
+9. The lifted particles become origami birds moving through a paper-collage music-sheet cityscape toward "Destination of Love".
 10. The airplane unfolds into a final letter, where the words bounce into place and remain readable.
 
 The side reading panel stays hidden during the cinematic sequence, then becomes available at the end so the complete letter can be read comfortably.
+
+The active renderer is `createEditorialRiverSketch`, which replaced the earlier saturated galaxy look with a quieter palette: parchment, ink, oxblood, muted teal, aged gold, and deep ultramarine.
 
 ## 7. Text As Living Particles
 
@@ -124,11 +126,12 @@ The final letter layout is rebuilt separately so the message returns to a readab
 
 The river reveal uses several coordinated layers:
 
-- warm blue and pale-gold cosmic atmosphere;
-- translucent sapphire lace rose and butterfly line art;
-- water ripples created by actual letter-character impacts;
+- paper-grain midnight atmosphere that retimes into muted dawn;
+- translucent lace bloom and blue sketch butterflies;
+- water ripples created by actual letter-character and word-fragment impacts;
 - a small origami boat that morphs into a paper airplane;
 - lifted particles and origami birds;
+- a collage city made from paper buildings, staff lines, tiny train moments, and printed text fragments;
 - a final canvas letter plus a stable readable side panel.
 
 The goal is not a short reveal trick. The river phase is a miniature delivery story that ends with the recipient able to read the full letter.
@@ -189,7 +192,7 @@ Users can choose relationship, occasion, mood, and intensity. Natural-language d
 3. Encrypt the user's letter with Web Crypto before saving.
 4. Use Matter.js for the writer's physical envelope gallery.
 5. Start a p5.js story canvas after successful unlock.
-6. Build sapphire rose, butterfly, word-rain, ripple, boat, airplane, bird, and final-letter stages.
+6. Build paper-lace bloom, sketch butterfly, typographic cascade, ripple, boat, airplane, bird, collage-city, destination, and final-letter stages.
 7. Use real letter characters as the falling typography material.
 8. Keep the side reading panel hidden during the story and reveal it at the end.
 9. Trigger Web Audio chimes from unlock and water impacts.
