@@ -21,6 +21,7 @@
     audioNeedsGesture: false,
     keySoundCounter: 0,
     toastTimer: 0,
+    revealTimer: 0,
   };
 
   const el = {};
@@ -1057,30 +1058,1015 @@
   }
 
   function startRiver(record, plaintext) {
+    window.clearTimeout(state.revealTimer);
     state.currentRiver = { record, plaintext };
-    renderRiverLetter();
+    renderRiverLetter(plaintext);
     showView("river");
     playUnlockBloom();
     destroyRiverSketch();
-    state.riverSketch = createRiverSketch(plaintext);
+    state.riverSketch = createStoryRiverSketch(plaintext, () => showCompletedRiverLetter(plaintext));
+    state.revealTimer = window.setTimeout(() => {
+      showCompletedRiverLetter(plaintext);
+    }, 36800);
   }
 
-  function renderRiverLetter() {
+  function renderRiverLetter(plaintext) {
     el.riverLetter.classList.remove("is-revealing");
     el.riverLetter.style.transition = "none";
     el.riverLetter.style.opacity = "0";
     el.riverLetter.style.pointerEvents = "none";
     el.riverLetter.setAttribute("aria-hidden", "true");
-    el.riverRecipient.textContent = "";
-    el.riverLetterTitle.textContent = "";
-    el.riverLetterMessage.textContent = "";
+    el.riverRecipient.textContent = plaintext.recipient ? `To ${plaintext.recipient}` : "";
+    el.riverLetterTitle.textContent = plaintext.title || "Untitled letter";
+    el.riverLetterMessage.textContent = plaintext.message || "";
+  }
+
+  function showCompletedRiverLetter(plaintext) {
+    el.riverRecipient.textContent = plaintext.recipient ? `To ${plaintext.recipient}` : "";
+    el.riverLetterTitle.textContent = plaintext.title || "Untitled letter";
+    el.riverLetterMessage.textContent = plaintext.message || "";
+    el.riverLetter.style.opacity = "1";
+    el.riverLetter.style.pointerEvents = "auto";
+    el.riverLetter.style.filter = "none";
+    el.riverLetter.style.transform = "none";
+    el.riverLetter.setAttribute("aria-hidden", "false");
   }
 
   function destroyRiverSketch() {
+    window.clearTimeout(state.revealTimer);
     if (!state.riverSketch) return;
     if (typeof state.riverSketch.cleanup === "function") state.riverSketch.cleanup();
     state.riverSketch.remove();
     state.riverSketch = null;
+  }
+
+  function createStoryRiverSketch(plaintext, onComplete) {
+    return new window.p5((p) => {
+      const palette = {
+        night: [5, 18, 54],
+        midnight: [7, 35, 86],
+        ultramarine: [18, 82, 160],
+        warmBlue: [84, 172, 226],
+        sapphire: [66, 183, 255],
+        paleGold: [255, 218, 120],
+        moon: [255, 246, 210],
+        paper: [255, 251, 241],
+        ink: [24, 40, 54],
+      };
+      const waterColors = [
+        [255, 246, 210],
+        [255, 218, 120],
+        [134, 211, 255],
+        [255, 255, 255],
+      ];
+
+      let staticStars = [];
+      let fogBands = [];
+      let butterflies = [];
+      let wordDrops = [];
+      let ripples = [];
+      let birds = [];
+      let finalLayout = null;
+      let startMillis = 0;
+      let waterY = 0;
+      let completed = false;
+      let lastChimeAt = 0;
+      let chimeCount = 0;
+
+      p.setup = () => {
+        p.pixelDensity(1);
+        p.frameRate(60);
+        const canvas = p.createCanvas(
+          Math.max(320, el.riverCanvas.clientWidth),
+          Math.max(440, el.riverCanvas.clientHeight),
+        );
+        canvas.parent(el.riverCanvas);
+        p.textFont("Georgia");
+        resetScene();
+      };
+
+      p.draw = () => {
+        const t = elapsed();
+        drawStoryBackground(t);
+        drawMoonAndStars(t);
+        drawWaterStage(t);
+        drawEnvelope(t);
+        drawSapphireLaceRose(t);
+        drawButterflies(t);
+        drawWordRain(t);
+        drawRipples(t);
+        drawMemoryThreads(t);
+        drawBoatPlaneAndBirds(t);
+        drawDestination(t);
+        drawFinalLetter(t);
+        drawForegroundGrain(t);
+
+        if (!completed && t > 36.5) {
+          completed = true;
+          if (typeof onComplete === "function") onComplete();
+        }
+      };
+
+      p.windowResized = () => {
+        const width = Math.max(320, el.riverCanvas.clientWidth);
+        const height = Math.max(440, el.riverCanvas.clientHeight);
+        p.resizeCanvas(width, height);
+        resetScene();
+      };
+
+      p.cleanup = () => {};
+
+      function resetScene() {
+        startMillis = p.millis();
+        waterY = p.height * 0.68;
+        completed = false;
+        lastChimeAt = 0;
+        chimeCount = 0;
+        staticStars = buildStaticStars();
+        fogBands = buildFogBands();
+        butterflies = buildButterflies();
+        wordDrops = buildWordDrops();
+        birds = buildBirds();
+        ripples = [];
+        finalLayout = buildFinalLetterLayout();
+      }
+
+      function elapsed() {
+        return (p.millis() - startMillis) / 1000;
+      }
+
+      function buildFullText() {
+        return [
+          plaintext.recipient ? `To ${plaintext.recipient}` : "",
+          plaintext.title || "Untitled letter",
+          "",
+          plaintext.message || "",
+        ].filter((line, index) => index < 3 || String(line).trim()).join("\n");
+      }
+
+      function buildStaticStars() {
+        const count = p.width < 680 ? 120 : 190;
+        const stars = [];
+        for (let i = 0; i < count; i += 1) {
+          stars.push({
+            x: p.random(p.width),
+            y: p.random(p.height * 0.02, p.height * 0.84),
+            r: p.random(0.45, 1.75),
+            phase: p.random(p.TWO_PI),
+            alpha: p.random(80, 230),
+            warm: p.random() > 0.45,
+          });
+        }
+        return stars;
+      }
+
+      function buildFogBands() {
+        const bands = [];
+        for (let i = 0; i < 8; i += 1) {
+          bands.push({
+            y: p.random(p.height * 0.34, p.height * 0.82),
+            width: p.random(p.width * 0.44, p.width * 0.9),
+            height: p.random(22, 62),
+            speed: p.random(0.04, 0.13),
+            phase: p.random(p.TWO_PI),
+          });
+        }
+        return bands;
+      }
+
+      function buildButterflies() {
+        const count = p.width < 680 ? 8 : 13;
+        const list = [];
+        for (let i = 0; i < count; i += 1) {
+          list.push({
+            delay: 4.2 + i * 0.18 + p.random(0, 0.45),
+            duration: p.random(6.2, 8.6),
+            angle: (i / count) * p.TWO_PI + p.random(-0.4, 0.4),
+            radius: p.random(110, Math.min(p.width, p.height) * 0.42),
+            size: p.random(0.72, 1.24),
+            phase: p.random(p.TWO_PI),
+          });
+        }
+        return list;
+      }
+
+      function buildWordDrops() {
+        const source = [...buildFullText()].filter((char) => /\S/.test(char));
+        const maxDrops = p.width < 680 ? 360 : 720;
+        const chars = source.slice(0, maxDrops);
+        const list = [];
+        const span = Math.max(1, chars.length - 1);
+        for (let i = 0; i < chars.length; i += 1) {
+          const u = i / span;
+          const targetX = p.lerp(p.width * 0.1, p.width * 0.9, u);
+          const riverWave = Math.sin(u * p.TWO_PI * 1.9) * p.height * 0.045;
+          list.push({
+            char: chars[i],
+            index: i,
+            start: 7.1 + u * 9.2 + p.random(0, 1.2),
+            duration: p.random(4.7, 7.2),
+            startX: targetX + p.random(-p.width * 0.12, p.width * 0.12),
+            startY: p.random(-p.height * 0.42, -30),
+            targetX,
+            targetY: waterY + riverWave + p.random(-10, 10),
+            size: p.random(13, 22),
+            sway: p.random(14, 44),
+            phase: p.random(p.TWO_PI),
+            symbolSeed: Math.floor(p.random(4)),
+            impacted: false,
+          });
+        }
+        return list;
+      }
+
+      function buildBirds() {
+        const count = p.width < 680 ? 18 : 34;
+        const list = [];
+        for (let i = 0; i < count; i += 1) {
+          list.push({
+            delay: 24.8 + p.random(0, 2.4),
+            duration: p.random(5.8, 8.4),
+            lane: i / Math.max(1, count - 1),
+            size: p.random(8, 17),
+            phase: p.random(p.TWO_PI),
+            color: p.random() > 0.35 ? [255, 251, 241] : [255, 224, 141],
+          });
+        }
+        return list;
+      }
+
+      function buildFinalLetterLayout() {
+        const paperW = Math.min(p.width * 0.86, 640);
+        const paperH = Math.min(p.height * 0.78, 520);
+        const x = (p.width - paperW) / 2;
+        const y = Math.max(24, (p.height - paperH) / 2);
+        const padding = Math.max(22, Math.min(42, paperW * 0.08));
+        let baseSize = Math.min(21, Math.max(12, p.width / 44));
+        let lines = [];
+
+        while (baseSize >= 10) {
+          lines = [];
+          const textWidth = paperW - padding * 2;
+          const sections = [
+            { text: plaintext.recipient ? `To ${plaintext.recipient}` : "", size: baseSize * 0.82, role: "recipient" },
+            { text: plaintext.title || "Untitled letter", size: baseSize * 1.35, role: "title" },
+            { text: "", size: baseSize, role: "gap" },
+            { text: plaintext.message || "", size: baseSize, role: "message" },
+          ];
+          sections.forEach((section) => {
+            if (!section.text) {
+              lines.push({ text: "", size: section.size, role: section.role });
+              return;
+            }
+            p.textSize(section.size);
+            wrapText(section.text, textWidth).forEach((line) => lines.push({ text: line, size: section.size, role: section.role }));
+          });
+          const height = lines.reduce((sum, line) => sum + line.size * (line.role === "gap" ? 0.82 : 1.42), 0);
+          if (height <= paperH - padding * 2 || baseSize <= 10) break;
+          baseSize -= 1;
+        }
+
+        const glyphs = [];
+        let cursorY = y + padding;
+        let order = 0;
+        const maxY = y + paperH - padding * 0.65;
+        lines.forEach((line) => {
+          const lineHeight = line.size * (line.role === "gap" ? 0.82 : 1.42);
+          if (cursorY + lineHeight > maxY) return;
+          p.textSize(line.size);
+          let cursorX = x + padding;
+          [...line.text].forEach((char) => {
+            const width = p.textWidth(char || " ");
+            glyphs.push({
+              char,
+              x: cursorX,
+              y: cursorY,
+              size: line.size,
+              role: line.role,
+              order,
+            });
+            order += 1;
+            cursorX += width;
+          });
+          cursorY += lineHeight;
+        });
+
+        return { x, y, w: paperW, h: paperH, padding, glyphs };
+      }
+
+      function wrapText(text, maxWidth) {
+        const lines = [];
+        String(text || "").split("\n").forEach((paragraph) => {
+          if (!paragraph.trim()) {
+            lines.push("");
+            return;
+          }
+          const hasSpaces = /\s/.test(paragraph);
+          const tokens = hasSpaces ? paragraph.split(/\s+/) : [...paragraph];
+          let line = "";
+          tokens.forEach((token) => {
+            const next = hasSpaces ? `${line}${line ? " " : ""}${token}` : `${line}${token}`;
+            if (p.textWidth(next) <= maxWidth || !line) {
+              line = next;
+            } else {
+              lines.push(line);
+              line = token;
+            }
+          });
+          if (line) lines.push(line);
+        });
+        return lines;
+      }
+
+      function drawStoryBackground(t) {
+        const dawn = smoothstep(23.5, 32, t);
+        const ctx = p.drawingContext;
+        const gradient = ctx.createLinearGradient(0, 0, p.width, p.height);
+        gradient.addColorStop(0, rgba(5 + dawn * 62, 18 + dawn * 54, 54 + dawn * 84, 1));
+        gradient.addColorStop(0.44, rgba(9 + dawn * 58, 46 + dawn * 76, 114 + dawn * 82, 1));
+        gradient.addColorStop(0.78, rgba(18 + dawn * 116, 83 + dawn * 91, 158 + dawn * 58, 1));
+        gradient.addColorStop(1, rgba(3 + dawn * 220, 12 + dawn * 160, 32 + dawn * 72, 1));
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, p.width, p.height);
+
+        const halo = ctx.createRadialGradient(p.width * 0.48, p.height * 0.43, 0, p.width * 0.48, p.height * 0.43, p.width * 0.62);
+        halo.addColorStop(0, rgba(77, 178, 255, 0.18 * (1 - dawn) + 0.12));
+        halo.addColorStop(0.5, rgba(255, 219, 130, 0.06 + dawn * 0.13));
+        halo.addColorStop(1, rgba(0, 0, 0, 0));
+        ctx.fillStyle = halo;
+        ctx.fillRect(0, 0, p.width, p.height);
+
+        drawFog(t, dawn);
+      }
+
+      function drawFog(t, dawn) {
+        p.noStroke();
+        fogBands.forEach((band, index) => {
+          const x = ((t * band.speed * 60 + band.phase * 80 + index * 113) % (p.width + band.width)) - band.width * 0.5;
+          const alpha = 16 + dawn * 18;
+          p.fill(174, 218, 255, alpha);
+          p.ellipse(x, band.y + Math.sin(t * 0.18 + band.phase) * 12, band.width, band.height);
+        });
+      }
+
+      function drawMoonAndStars(t) {
+        p.push();
+        p.blendMode(p.ADD);
+        staticStars.forEach((star) => {
+          const twinkle = 0.68 + Math.sin(t * 1.2 + star.phase) * 0.32;
+          const color = star.warm ? palette.paleGold : palette.moon;
+          p.noStroke();
+          p.fill(color[0], color[1], color[2], star.alpha * twinkle);
+          p.circle(star.x, star.y, star.r * 2);
+        });
+        p.pop();
+
+        const moonX = p.width * 0.82;
+        const moonY = p.height * 0.16;
+        p.push();
+        p.blendMode(p.ADD);
+        drawGlow(moonX, moonY, 62, palette.paleGold, 35);
+        p.noStroke();
+        p.fill(255, 245, 205, 210);
+        p.circle(moonX, moonY, 36);
+        p.fill(9, 40, 104, 210);
+        p.circle(moonX + 12, moonY - 2, 36);
+        p.pop();
+      }
+
+      function drawEnvelope(t) {
+        const appear = 1 - smoothstep(4.6, 5.8, t);
+        if (appear <= 0) return;
+        const open = smoothstep(0.7, 2.3, t);
+        const lift = smoothstep(1.8, 3.4, t);
+        const cx = p.width * 0.5;
+        const cy = p.height * 0.56 - lift * p.height * 0.2;
+        const w = Math.min(210, p.width * 0.34);
+        const h = w * 0.58;
+
+        p.push();
+        p.translate(cx, cy);
+        p.noStroke();
+        p.fill(0, 15, 45, 48 * appear);
+        p.rect(-w / 2 + 8, -h / 2 + 10, w, h, 8);
+        p.fill(255, 248, 232, 220 * appear);
+        p.rect(-w / 2, -h / 2, w, h, 8);
+        p.stroke(71, 121, 170, 120 * appear);
+        p.strokeWeight(1.2);
+        p.line(-w / 2, -h / 2, 0, 6);
+        p.line(w / 2, -h / 2, 0, 6);
+        p.line(-w / 2, h / 2, -8, 2);
+        p.line(w / 2, h / 2, 8, 2);
+        p.noStroke();
+        p.fill(218, 241, 255, 190 * appear);
+        p.beginShape();
+        p.vertex(-w / 2, -h / 2);
+        p.vertex(0, -h / 2 - open * 74);
+        p.vertex(w / 2, -h / 2);
+        p.vertex(0, 6);
+        p.endShape(p.CLOSE);
+        drawGlow(0, 4, 36 + open * 42, palette.sapphire, 45 * open * appear);
+        p.fill(84, 172, 226, 210 * appear);
+        p.circle(0, 6, 24);
+        p.fill(255, 235, 175, 170 * open * appear);
+        p.circle(0, 6, 9 + open * 4);
+        p.pop();
+      }
+
+      function drawSapphireLaceRose(t) {
+        const bloom = smoothstep(2.0, 7.2, t);
+        const fade = 1 - smoothstep(11.2, 14.4, t);
+        if (bloom <= 0 || fade <= 0) return;
+        const cx = p.width * 0.5;
+        const cy = p.height * 0.32 + Math.sin(t * 0.45) * 6;
+        const scale = Math.min(p.width, p.height) / 610;
+
+        p.push();
+        p.translate(cx, cy);
+        p.rotate(Math.sin(t * 0.22) * 0.14);
+        p.scale(scale);
+        p.blendMode(p.ADD);
+        drawGlow(0, 0, 260 * bloom, palette.sapphire, 45 * fade);
+        drawGlow(0, 0, 160 * bloom, palette.moon, 18 * fade);
+        p.blendMode(p.BLEND);
+
+        for (let ring = 4; ring >= 0; ring -= 1) {
+          const petals = 6 + ring * 2;
+          const ringBloom = p.constrain((bloom - ring * 0.07) / 0.62, 0, 1);
+          for (let i = 0; i < petals; i += 1) {
+            const angle = (i / petals) * p.TWO_PI + ring * 0.32 + t * 0.08 * (ring % 2 ? -1 : 1);
+            const length = p.lerp(28, 86 + ring * 18, ringBloom);
+            const width = p.lerp(12, 32 + ring * 7, ringBloom);
+            const offset = ring * 10 * ringBloom;
+            drawLacePetal(angle, offset, length, width, ring, i, fade, ringBloom);
+          }
+        }
+
+        p.noStroke();
+        p.fill(210, 241, 255, 175 * fade);
+        p.circle(0, 0, 24 * bloom);
+        p.fill(255, 230, 150, 120 * fade);
+        p.circle(0, 0, 9 * bloom);
+        p.pop();
+      }
+
+      function drawLacePetal(angle, offset, length, width, ring, index, alpha, bloom) {
+        p.push();
+        p.rotate(angle);
+        p.translate(offset, 0);
+        p.rotate(Math.sin(index + ring) * 0.18 * (1 - bloom));
+        const rich = p.map(ring, 0, 4, 0.5, 1);
+        p.fill(55, 172, 246, 28 * alpha + rich * 20);
+        p.stroke(172, 231, 255, 86 * alpha);
+        p.strokeWeight(1.1);
+        p.beginShape();
+        p.vertex(0, 0);
+        p.bezierVertex(length * 0.18, -width * 0.92, length * 0.78, -width * 0.72, length, 0);
+        p.bezierVertex(length * 0.78, width * 0.72, length * 0.18, width * 0.92, 0, 0);
+        p.endShape(p.CLOSE);
+
+        p.stroke(230, 247, 255, 92 * alpha);
+        p.strokeWeight(0.72);
+        for (let i = 1; i <= 4; i += 1) {
+          const u = i / 5;
+          p.line(length * 0.08, 0, length * (0.18 + u * 0.68), Math.sin(i + ring) * width * 0.32);
+          p.noFill();
+          p.arc(length * (0.18 + u * 0.14), 0, width * (0.9 + u), width * (0.34 + u * 0.16), -0.9, 0.9);
+        }
+        p.stroke(255, 244, 205, 48 * alpha);
+        for (let i = 0; i < 8; i += 1) {
+          const u = (i + 0.5) / 8;
+          p.point(length * u, Math.sin(u * Math.PI * 5 + ring) * width * 0.32);
+        }
+        p.pop();
+      }
+
+      function drawButterflies(t) {
+        butterflies.forEach((butterfly) => {
+          const local = p.constrain((t - butterfly.delay) / butterfly.duration, 0, 1);
+          if (local <= 0 || local >= 1) return;
+          const rise = easeOutCubic(local);
+          const cx = p.width * 0.5;
+          const cy = p.height * 0.32;
+          const angle = butterfly.angle + rise * p.TWO_PI * 1.25;
+          const radius = butterfly.radius * rise;
+          const x = cx + Math.cos(angle) * radius;
+          const y = cy + Math.sin(angle) * radius * 0.55 - rise * p.height * 0.18;
+          const alpha = Math.sin(local * Math.PI);
+          drawButterfly(x, y, butterfly.size * (0.8 + rise * 0.55), angle, alpha, t + butterfly.phase);
+        });
+      }
+
+      function drawButterfly(x, y, scale, angle, alpha, wingT) {
+        const flap = 0.72 + Math.sin(wingT * 9) * 0.28;
+        p.push();
+        p.translate(x, y);
+        p.rotate(angle * 0.25);
+        p.scale(scale);
+        p.blendMode(p.ADD);
+        p.stroke(222, 244, 255, 135 * alpha);
+        p.strokeWeight(1);
+        p.noFill();
+        p.bezier(0, 0, -17 * flap, -18, -32 * flap, -6, -11, 5);
+        p.bezier(0, 0, 17 * flap, -18, 32 * flap, -6, 11, 5);
+        p.bezier(0, 2, -13 * flap, 12, -25 * flap, 19, -5, 22);
+        p.bezier(0, 2, 13 * flap, 12, 25 * flap, 19, 5, 22);
+        p.stroke(255, 226, 148, 70 * alpha);
+        p.line(0, -7, 0, 13);
+        p.pop();
+      }
+
+      function drawWaterStage(t) {
+        const appear = smoothstep(5.8, 8.2, t);
+        if (appear <= 0) return;
+        const ctx = p.drawingContext;
+        const gradient = ctx.createLinearGradient(0, waterY - 90, 0, p.height);
+        gradient.addColorStop(0, rgba(54, 162, 230, 0));
+        gradient.addColorStop(0.18, rgba(110, 198, 255, 0.18 * appear));
+        gradient.addColorStop(0.56, rgba(12, 60, 133, 0.42 * appear));
+        gradient.addColorStop(1, rgba(3, 14, 42, 0.74 * appear));
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, waterY - 100, p.width, p.height - waterY + 100);
+
+        p.push();
+        p.blendMode(p.ADD);
+        p.noFill();
+        for (let i = 0; i < 8; i += 1) {
+          p.stroke(155, 219, 255, (18 - i) * appear);
+          p.strokeWeight(1);
+          p.beginShape();
+          for (let x = -20; x <= p.width + 20; x += 28) {
+            const y = waterY + Math.sin(x * 0.012 + t * 0.7 + i) * (3 + i * 1.5) + i * 7;
+            p.curveVertex(x, y);
+          }
+          p.endShape();
+        }
+        p.pop();
+      }
+
+      function drawWordRain(t) {
+        const rainAppear = smoothstep(6.5, 9.2, t);
+        if (rainAppear <= 0) return;
+        p.push();
+        p.textFont("Georgia");
+        wordDrops.forEach((drop) => {
+          const local = p.constrain((t - drop.start) / drop.duration, 0, 1);
+          if (local <= 0) return;
+          if (local < 1) {
+            const fall = easeInOutCubic(local);
+            const x = p.lerp(drop.startX, drop.targetX, fall) + Math.sin(t * 1.1 + drop.phase) * drop.sway * (1 - fall * 0.65);
+            const y = p.lerp(drop.startY, drop.targetY, fall);
+            drawRainThread(x, y, drop, fall, rainAppear);
+            drawConstellationLetter(x, y, drop, 1 - fall * 0.12, rainAppear);
+          } else {
+            if (!drop.impacted) {
+              drop.impacted = true;
+              ripples.push({ x: drop.targetX, y: drop.targetY, born: t, strength: p.random(0.75, 1.25) });
+              if (t - lastChimeAt > 0.06 && chimeCount < 80) {
+                lastChimeAt = t;
+                chimeCount += 1;
+                playWaterChime(0.44, p.map(drop.targetX, 0, p.width, -0.7, 0.7));
+              }
+            }
+            drawSettledOrLiftedDrop(drop, t);
+          }
+        });
+        p.pop();
+      }
+
+      function drawRainThread(x, y, drop, fall, alpha) {
+        p.push();
+        p.blendMode(p.ADD);
+        p.stroke(190, 231, 255, 48 * alpha * (1 - fall * 0.15));
+        p.strokeWeight(0.75);
+        p.line(x, Math.max(0, y - 150), x + Math.sin(drop.phase) * 5, y - 10);
+        p.pop();
+      }
+
+      function drawConstellationLetter(x, y, drop, scale, alpha) {
+        p.push();
+        p.translate(x, y);
+        p.scale(scale);
+        p.blendMode(p.ADD);
+        drawGlow(0, 0, drop.size * 3.1, palette.paleGold, 36 * alpha);
+        p.textAlign(p.CENTER, p.CENTER);
+        p.textSize(drop.size);
+        p.noStroke();
+        p.fill(255, 246, 210, 225 * alpha);
+        p.text(drop.char, 0, 0);
+
+        const symbols = ["*", "o", "·", "◦"];
+        for (let i = 0; i < 5; i += 1) {
+          const angle = drop.phase + i * 1.26;
+          const radius = drop.size * (0.42 + (i % 3) * 0.18);
+          const sx = Math.cos(angle) * radius;
+          const sy = Math.sin(angle) * radius;
+          const color = waterColors[(drop.symbolSeed + i) % waterColors.length];
+          p.fill(color[0], color[1], color[2], 140 * alpha);
+          if (i % 2 === 0) {
+            drawTinyMoon(sx, sy, 2.8);
+          } else {
+            p.textSize(6);
+            p.text(symbols[(drop.symbolSeed + i) % symbols.length], sx, sy);
+          }
+        }
+        p.pop();
+      }
+
+      function drawSettledOrLiftedDrop(drop, t) {
+        const lift = smoothstep(22.1, 25.8, t);
+        if (lift <= 0) {
+          p.push();
+          p.blendMode(p.ADD);
+          const pulse = 0.58 + Math.sin(t * 2.5 + drop.phase) * 0.28;
+          p.fill(255, 229, 145, 72 * pulse);
+          p.noStroke();
+          p.circle(drop.targetX, drop.targetY + Math.sin(t + drop.phase) * 2, 3.2);
+          if (drop.index % 5 === 0) {
+            p.textAlign(p.CENTER, p.CENTER);
+            p.textSize(10);
+            p.fill(214, 241, 255, 75);
+            p.text(drop.char, drop.targetX, drop.targetY - 5);
+          }
+          p.pop();
+          return;
+        }
+
+        if (lift < 1 && drop.index % 2 === 0) {
+          const plane = airplanePoint(t);
+          const delay = (drop.index % 60) / 60;
+          const local = p.constrain((lift - delay * 0.45) / 0.74, 0, 1);
+          if (local <= 0) return;
+          const curve = Math.sin(local * Math.PI) * p.height * 0.18;
+          const x = p.lerp(drop.targetX, plane.x - 40 + Math.sin(drop.phase) * 35, local);
+          const y = p.lerp(drop.targetY, plane.y + Math.cos(drop.phase) * 22, local) - curve;
+          p.push();
+          p.blendMode(p.ADD);
+          p.stroke(255, 231, 146, 48 * (1 - local));
+          p.line(drop.targetX, drop.targetY, x, y);
+          p.noStroke();
+          p.fill(255, 246, 210, 170 * (1 - local * 0.35));
+          p.circle(x, y, 2.8 * (1 - local * 0.45));
+          p.pop();
+        }
+      }
+
+      function drawRipples(t) {
+        ripples = ripples.filter((ripple) => t - ripple.born < 6.2);
+        if (!ripples.length) return;
+        p.push();
+        p.blendMode(p.ADD);
+        p.noFill();
+        ripples.forEach((ripple) => {
+          const age = t - ripple.born;
+          const fade = Math.max(0, 1 - age / 6.2);
+          for (let i = 0; i < 3; i += 1) {
+            const radius = (age * 24 + i * 18) * ripple.strength;
+            p.stroke(255, 232, 150, 38 * fade * (1 - i * 0.18));
+            p.strokeWeight(1);
+            p.ellipse(ripple.x, ripple.y, radius * 2.7, radius * 0.52);
+          }
+        });
+        p.pop();
+      }
+
+      function drawMemoryThreads(t) {
+        const active = smoothstep(14, 20, t) * (1 - smoothstep(25, 29, t));
+        if (active <= 0) return;
+        const points = wordDrops.filter((drop) => drop.impacted && drop.index % 13 === 0);
+        p.push();
+        p.blendMode(p.ADD);
+        p.noFill();
+        for (let i = 1; i < points.length; i += 1) {
+          const a = points[i - 1];
+          const b = points[i];
+          p.stroke(255, 229, 145, 18 * active);
+          p.line(a.targetX, a.targetY, b.targetX, b.targetY);
+        }
+        p.pop();
+      }
+
+      function drawBoatPlaneAndBirds(t) {
+        if (t < 8.6) return;
+        const boat = boatPoint(t);
+        const tremble = recentRippleTremble(t, boat.x);
+        const fold = smoothstep(19.8, 22.2, t);
+        const takeoff = smoothstep(22.0, 25.9, t);
+
+        if (takeoff <= 0.02) {
+          drawBoatPlaneMorph(boat.x, boat.y + tremble, fold, t);
+        } else if (takeoff < 1) {
+          const plane = airplanePoint(t);
+          drawPaperAirplane(plane.x, plane.y, plane.angle, 1.0, 245);
+          drawLiftTrails(plane, t);
+        }
+
+        drawCityscapeMusic(t);
+        drawBirds(t);
+      }
+
+      function boatPoint(t) {
+        const u = smoothstep(8.5, 19.8, t);
+        return {
+          x: p.lerp(p.width * 0.08, p.width * 0.64, u),
+          y: waterY + 21 + Math.sin(t * p.TWO_PI * 0.6) * 3,
+        };
+      }
+
+      function airplanePoint(t) {
+        const u = smoothstep(22, 26.4, t);
+        const x0 = p.width * 0.64;
+        const y0 = waterY + 8;
+        const x1 = p.width * 0.55;
+        const y1 = p.height * 0.31;
+        const x2 = p.width * 0.86;
+        const y2 = p.height * 0.2;
+        const x = quadratic(x0, x1, x2, u);
+        const y = quadratic(y0, y1, y2, u);
+        const dx = quadraticDerivative(x0, x1, x2, u);
+        const dy = quadraticDerivative(y0, y1, y2, u);
+        return { x, y, angle: Math.atan2(dy, dx) };
+      }
+
+      function recentRippleTremble(t, x) {
+        let tremble = 0;
+        ripples.forEach((ripple) => {
+          const age = t - ripple.born;
+          const reach = age * 35 + 40;
+          const influence = Math.max(0, 1 - Math.abs(x - ripple.x) / reach) * Math.max(0, 1 - age / 4.4);
+          tremble += Math.sin(age * 9) * influence * 4;
+        });
+        return tremble;
+      }
+
+      function drawBoatPlaneMorph(x, y, fold, t) {
+        p.push();
+        p.translate(x, y);
+        p.stroke(255, 251, 241, 230);
+        p.strokeWeight(1.4);
+        p.fill(255, 255, 255, 26);
+        if (fold < 0.02) {
+          const w = 42;
+          p.noFill();
+          p.line(-w / 2, 0, -w * 0.18, 13);
+          p.line(-w * 0.18, 13, w * 0.16, 13);
+          p.line(w * 0.16, 13, w / 2, 0);
+          p.line(-w / 2, 0, 0, -18);
+          p.line(0, -18, w / 2, 0);
+          p.line(-w * 0.18, 13, 0, 0);
+          p.line(0, 0, w * 0.16, 13);
+        } else {
+          const wing = p.lerp(22, 48, fold);
+          const nose = p.lerp(-3, 44, fold);
+          const tail = p.lerp(-22, -28, fold);
+          p.beginShape();
+          p.vertex(tail, -5);
+          p.vertex(nose, 0);
+          p.vertex(tail, 12);
+          p.vertex(-7, 1 + Math.sin(t * 3) * 1.2);
+          p.endShape(p.CLOSE);
+          p.line(-7, 1, tail + 8, -11);
+          p.line(-7, 1, tail + 8, 18);
+          p.line(-7, 1, wing * 0.45, 0);
+        }
+        p.pop();
+      }
+
+      function drawPaperAirplane(x, y, angle, scale, alpha) {
+        p.push();
+        p.translate(x, y);
+        p.rotate(angle);
+        p.scale(scale);
+        p.stroke(255, 251, 241, alpha);
+        p.strokeWeight(1.35);
+        p.fill(255, 255, 255, 42);
+        p.beginShape();
+        p.vertex(-30, -10);
+        p.vertex(42, 0);
+        p.vertex(-30, 17);
+        p.vertex(-9, 2);
+        p.endShape(p.CLOSE);
+        p.line(-9, 2, -28, -10);
+        p.line(-9, 2, -25, 19);
+        p.line(-9, 2, 42, 0);
+        p.pop();
+      }
+
+      function drawLiftTrails(plane, t) {
+        p.push();
+        p.blendMode(p.ADD);
+        p.noFill();
+        for (let i = 0; i < 7; i += 1) {
+          p.stroke(255, 225, 138, 54 - i * 5);
+          p.beginShape();
+          p.curveVertex(plane.x - i * 19, plane.y + Math.sin(t + i) * 12);
+          p.curveVertex(plane.x - i * 28, plane.y + 18 + i * 6);
+          p.curveVertex(plane.x - i * 48, waterY - i * 4);
+          p.curveVertex(plane.x - i * 78, waterY + 24 + Math.sin(i) * 10);
+          p.endShape();
+        }
+        p.pop();
+      }
+
+      function drawCityscapeMusic(t) {
+        const appear = smoothstep(24.2, 29.4, t);
+        if (appear <= 0) return;
+        p.push();
+        p.blendMode(p.BLEND);
+        p.noFill();
+        p.stroke(255, 232, 158, 58 * appear);
+        p.strokeWeight(1);
+        for (let staff = 0; staff < 5; staff += 1) {
+          p.beginShape();
+          for (let x = -20; x < p.width + 40; x += 36) {
+            const y = p.height * 0.42 + staff * 16 + Math.sin(x * 0.013 + t * 0.28) * 18;
+            p.curveVertex(x, y);
+          }
+          p.endShape();
+        }
+        p.noStroke();
+        p.fill(9, 35, 75, 115 * appear);
+        const baseY = p.height * 0.78;
+        for (let i = 0; i < 18; i += 1) {
+          const x = (i / 18) * p.width;
+          const w = 26 + (i % 4) * 9;
+          const h = 34 + (i % 5) * 13;
+          p.rect(x, baseY - h, w, h);
+          p.triangle(x - 2, baseY - h, x + w / 2, baseY - h - 18, x + w + 2, baseY - h);
+          p.fill(255, 226, 142, 65 * appear);
+          p.rect(x + 7, baseY - h + 12, 5, 8);
+          p.rect(x + w - 12, baseY - h + 22, 5, 8);
+          p.fill(9, 35, 75, 115 * appear);
+        }
+        p.stroke(255, 246, 210, 72 * appear);
+        p.strokeWeight(1);
+        p.line(p.width * 0.06, baseY - 20, p.width * 0.92, baseY - 20);
+        p.pop();
+      }
+
+      function drawBirds(t) {
+        const appear = smoothstep(24.8, 27, t);
+        if (appear <= 0) return;
+        birds.forEach((bird, index) => {
+          const local = p.constrain((t - bird.delay) / bird.duration, 0, 1);
+          if (local <= 0 || local >= 1) return;
+          const u = easeInOutCubic(local);
+          const startX = p.width * (0.36 + (index % 6) * 0.035);
+          const startY = p.height * (0.28 + (index % 5) * 0.034);
+          const endX = p.width * (0.76 + bird.lane * 0.18);
+          const endY = p.height * (0.18 + Math.sin(bird.lane * Math.PI) * 0.19);
+          const x = p.lerp(startX, endX, u);
+          const y = p.lerp(startY, endY, u) + Math.sin(t * 2 + bird.phase) * 12;
+          const alpha = Math.sin(local * Math.PI) * 210 * appear;
+          drawOrigamiBird(x, y, bird.size, Math.sin(t + bird.phase) * 0.24, bird.color, alpha);
+        });
+      }
+
+      function drawOrigamiBird(x, y, size, tilt, color, alpha) {
+        p.push();
+        p.translate(x, y);
+        p.rotate(tilt);
+        p.stroke(color[0], color[1], color[2], alpha);
+        p.strokeWeight(1.05);
+        p.fill(color[0], color[1], color[2], alpha * 0.08);
+        p.beginShape();
+        p.vertex(0, 0);
+        p.vertex(-size * 1.4, -size * 0.38);
+        p.vertex(-size * 0.28, size * 0.18);
+        p.vertex(0, 0);
+        p.vertex(size * 1.4, -size * 0.38);
+        p.vertex(size * 0.3, size * 0.18);
+        p.endShape();
+        p.line(-size * 0.28, size * 0.18, 0, size * 0.74);
+        p.line(size * 0.3, size * 0.18, 0, size * 0.74);
+        p.pop();
+      }
+
+      function drawDestination(t) {
+        const appear = smoothstep(27.6, 31, t);
+        if (appear <= 0) return;
+        const x = p.width * 0.76;
+        const y = p.height * 0.18;
+        p.push();
+        p.blendMode(p.ADD);
+        drawGlow(x, y, 130, palette.paleGold, 42 * appear);
+        p.pop();
+        p.noStroke();
+        p.fill(255, 244, 204, 220 * appear);
+        p.textAlign(p.CENTER, p.CENTER);
+        p.textFont("Georgia");
+        p.textSize(Math.min(24, Math.max(15, p.width / 42)));
+        p.text("Destination of Love", x, y);
+      }
+
+      function drawFinalLetter(t) {
+        const unfold = smoothstep(30.8, 33.2, t);
+        if (unfold <= 0) return;
+        const cx = finalLayout.x + finalLayout.w / 2;
+        const cy = finalLayout.y + finalLayout.h / 2;
+        p.push();
+        p.translate(cx, cy);
+        p.rotate((1 - unfold) * -0.12);
+        p.scale(0.26 + unfold * 0.74, 0.08 + unfold * 0.92);
+        p.translate(-cx, -cy);
+        drawLetterPaper(unfold);
+        p.pop();
+
+        const revealStart = 32.7;
+        p.push();
+        p.textFont("Georgia");
+        p.textAlign(p.LEFT, p.TOP);
+        finalLayout.glyphs.forEach((glyph) => {
+          const local = smoothstep(revealStart + glyph.order * 0.018, revealStart + glyph.order * 0.018 + 0.55, t);
+          if (local <= 0) return;
+          const bounce = Math.sin(local * Math.PI) * 7;
+          const alpha = 235 * local;
+          p.textSize(glyph.size);
+          if (glyph.role === "recipient") {
+            p.fill(28, 109, 174, alpha);
+          } else if (glyph.role === "title") {
+            p.fill(16, 45, 74, alpha);
+          } else {
+            p.fill(25, 46, 58, alpha);
+          }
+          p.text(glyph.char, glyph.x, glyph.y - bounce);
+        });
+        p.pop();
+      }
+
+      function drawLetterPaper(alpha) {
+        const { x, y, w, h } = finalLayout;
+        p.noStroke();
+        p.fill(0, 21, 44, 56 * alpha);
+        p.rect(x + 12, y + 14, w, h, 10);
+        p.fill(255, 251, 241, 240 * alpha);
+        p.rect(x, y, w, h, 10);
+        p.stroke(255, 219, 132, 45 * alpha);
+        p.strokeWeight(1);
+        for (let lineY = y + finalLayout.padding + 46; lineY < y + h - finalLayout.padding * 0.5; lineY += 28) {
+          p.line(x + finalLayout.padding, lineY, x + w - finalLayout.padding, lineY);
+        }
+        p.noFill();
+        p.stroke(93, 166, 208, 72 * alpha);
+        p.rect(x + 10, y + 10, w - 20, h - 20, 8);
+      }
+
+      function drawForegroundGrain(t) {
+        p.push();
+        p.blendMode(p.ADD);
+        for (let i = 0; i < 18; i += 1) {
+          const x = (i * 97 + t * 9) % p.width;
+          const y = (i * 47 + Math.sin(t + i) * 16) % p.height;
+          p.noStroke();
+          p.fill(255, 236, 172, 18);
+          p.circle(x, y, 1.2 + (i % 3));
+        }
+        p.pop();
+      }
+
+      function drawTinyMoon(x, y, radius) {
+        p.push();
+        p.noStroke();
+        p.fill(255, 239, 177, 160);
+        p.circle(x, y, radius * 2);
+        p.fill(18, 82, 160, 130);
+        p.circle(x + radius * 0.45, y - radius * 0.12, radius * 2);
+        p.pop();
+      }
+
+      function drawGlow(x, y, radius, color, alpha) {
+        p.noStroke();
+        for (let i = 5; i >= 1; i -= 1) {
+          p.fill(color[0], color[1], color[2], alpha * (0.02 + i * 0.035));
+          p.circle(x, y, radius * i * 0.44);
+        }
+      }
+
+      function rgba(r, g, b, a) {
+        return `rgba(${Math.round(r)},${Math.round(g)},${Math.round(b)},${a})`;
+      }
+
+      function smoothstep(edge0, edge1, value) {
+        const x = p.constrain((value - edge0) / (edge1 - edge0), 0, 1);
+        return x * x * (3 - 2 * x);
+      }
+
+      function easeOutCubic(t) {
+        return 1 - Math.pow(1 - t, 3);
+      }
+
+      function easeInOutCubic(t) {
+        return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      }
+
+      function quadratic(a, b, c, t) {
+        return Math.pow(1 - t, 2) * a + 2 * (1 - t) * t * b + t * t * c;
+      }
+
+      function quadraticDerivative(a, b, c, t) {
+        return 2 * (1 - t) * (b - a) + 2 * t * (c - b);
+      }
+    }, el.riverCanvas);
   }
 
   function createRiverSketch(plaintext) {

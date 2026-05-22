@@ -8,7 +8,7 @@ The app has three phases:
 
 1. Write: collect the recipient, title, access key, key prompt, and message.
 2. Gallery: show the writer's own encrypted letters as hanging envelopes.
-3. Galaxy River Letter: unlock the envelope, turn the actual recipient/title/message characters into canvas particles, dissolve them into a Milky Way-like river stream, and keep the letter experience entirely inside the p5 canvas.
+3. Galaxy River Letter: unlock the envelope, bloom a sapphire lace rose, let the real words fall as stardust rain, carry them through a boat/airplane/bird journey, and settle into a readable delivered letter.
 
 Plaintext is not saved to browser storage. Saved and shared letters contain encrypted data only.
 
@@ -28,7 +28,7 @@ Write_Letters/
 
 `src/styles.css` controls the paper interface, layout, keyboard, modal, gallery, and river container.
 
-`src/app.js` contains state management, encryption, local storage, sharing, Web Audio, the Matter.js gallery, and the p5.js canvas-based river reveal.
+`src/app.js` contains state management, encryption, local storage, sharing, Web Audio, the Matter.js gallery, and the p5.js story-based river reveal.
 
 ## 3. Data And Privacy Model
 
@@ -79,17 +79,20 @@ This preserves the person-to-person mechanism: the gallery is built from the wri
 
 ## 6. Galaxy River Letter Phase
 
-The unlock scene is now the "Milky Way Letter Dissolution" canvas stage. It is designed around this sequence:
+The unlock scene is now a longer story-based canvas stage. It is designed around this sequence:
 
-1. A deep radial cosmic background appears with static stars and drifting blue nebula wisps.
-2. Every character from the recipient, title, and message is placed at its natural reading position on the canvas.
-3. On reveal, each character accelerates downward and inward toward an S-curved river axis.
-4. Characters rotate through two full turns, shrink from full size to a small mote, and leave short luminous comet tails.
-5. Each river impact spawns crystal micro-particles and extra sparkle flashes.
-6. The micro-particles flow along the S-curve with small perpendicular drift, pulsing instead of linearly fading.
-7. A small line-art paper boat floats left-to-right near the lower edge of the river path.
+1. The envelope opens after the correct key.
+2. A translucent sapphire-blue lace rose unfolds from a bud into bloom.
+3. Line-art butterflies emerge from the petals and spiral outward.
+4. The scene opens into a midnight-blue word-rain gallery.
+5. Real characters from the recipient, title, and message fall as stardust typography with moon/star details and glass-like rain threads.
+6. The falling characters touch the water, create glowing ripples, and build a connected memory network.
+7. A white origami boat crosses the water and trembles with nearby ripples.
+8. The boat folds into a paper airplane, lifts the glowing memories upward, and shifts the palette toward pale gold dawn.
+9. The lifted particles become origami birds moving through a music-sheet cityscape toward "Destination of Love".
+10. The airplane unfolds into a final letter, where the words bounce into place and remain readable.
 
-The side reading panel is hidden when the river animation starts. The canvas is the letter; there is no final DOM-text fade-in for the river content.
+The side reading panel stays hidden during the cinematic sequence, then becomes available at the end so the complete letter can be read comfortably.
 
 ## 7. Text As Living Particles
 
@@ -105,29 +108,30 @@ const letterText = [
 const characters = [...letterText];
 ```
 
-Those characters become `CharacterParticle` objects. Whitespace still affects the natural layout, while visible characters draw as canvas glyphs. Each particle has:
+Those characters become `wordDrops` in the story canvas. Each visible character has:
 
-- its natural reading position;
-- a river impact point on the sigmoid/S-curve;
-- a staggered start time and fall duration;
-- a 4-6 point luminous tail;
-- 0 to 720 degree rotation;
-- 1.0 to 0.08 scale collapse;
-- an impact state that spawns micro-particles, sparkles, and chime feedback.
+- a stardust rain start position;
+- a water impact point;
+- a staggered fall time and duration;
+- a glass-like rain thread;
+- moon, star, and particle accents;
+- an impact state that spawns ripples and chime feedback;
+- a later lifted-memory state when the airplane pulls the letters upward.
 
-The early scene starts readable only because the characters begin in normal letter layout. Readability then dissolves into pattern as the letter becomes the river.
+The final letter layout is rebuilt separately so the message returns to a readable form after the journey.
 
-## 8. River Stream And Sparkles
+## 8. River, Folding, And Delivery
 
-The river is a sigmoid/S-curved particle path across the canvas:
+The river reveal uses several coordinated layers:
 
-- ambient river motes keep the path visible;
-- character impacts spawn 8-14 micro-particles;
-- micro-particles cycle through cream, gold, pale blue-gray, and white;
-- each micro-particle lives for 2.4-4 seconds, pulses with a sine wave, shrinks from 2px to 0, and floats upward near the end of life;
-- a continuous pool of crystal sparkles appears near the river and impact flashes add extra sparkle bursts.
+- warm blue and pale-gold cosmic atmosphere;
+- translucent sapphire lace rose and butterfly line art;
+- water ripples created by actual letter-character impacts;
+- a small origami boat that morphs into a paper airplane;
+- lifted particles and origami birds;
+- a final canvas letter plus a stable readable side panel.
 
-The draw order is: static background and nebula, river particle stream, falling character particles, the small paper boat, then crystal sparkles.
+The goal is not a short reveal trick. The river phase is a miniature delivery story that ends with the recipient able to read the full letter.
 
 ## 9. Sound Design
 
@@ -184,12 +188,12 @@ Users can choose relationship, occasion, mood, and intensity. Natural-language d
 2. Use CSS for paper, layout, accessibility, and the river container.
 3. Encrypt the user's letter with Web Crypto before saving.
 4. Use Matter.js for the writer's physical envelope gallery.
-5. Start a p5.js canvas after successful unlock.
-6. Build the static star background once, then animate nebula wisps in the draw loop.
-7. Create one canvas particle per letter character and move it from reading layout into the S-curved river.
-8. Spawn river micro-particles and sparkle impacts when characters dissolve.
-9. Draw the paper boat and continuously refresh the sparkle pool.
-10. Trigger Web Audio chimes from unlock and river impacts.
+5. Start a p5.js story canvas after successful unlock.
+6. Build sapphire rose, butterfly, word-rain, ripple, boat, airplane, bird, and final-letter stages.
+7. Use real letter characters as the falling typography material.
+8. Keep the side reading panel hidden during the story and reveal it at the end.
+9. Trigger Web Audio chimes from unlock and water impacts.
+10. Leave the complete delivered letter readable after the animation settles.
 
 ## 13. GitHub Pages Deployment
 
