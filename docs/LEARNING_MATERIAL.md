@@ -8,7 +8,7 @@ The app has three phases:
 
 1. Write: collect the recipient, title, access key, key prompt, and message.
 2. Gallery: show the writer's own encrypted letters as hanging envelopes.
-3. Galaxy River Letter: unlock the envelope, release a brief rose-memory burst, collapse into cosmic water, turn the user's letters into falling star-glyphs, and reveal the readable letter at the end.
+3. Galaxy River Letter: unlock the envelope, turn the actual recipient/title/message characters into canvas particles, dissolve them into a Milky Way-like river stream, and keep the letter experience entirely inside the p5 canvas.
 
 Plaintext is not saved to browser storage. Saved and shared letters contain encrypted data only.
 
@@ -26,9 +26,9 @@ Write_Letters/
 
 `index.html` defines the application sections and loads `p5.js`, `Matter.js`, the stylesheet, and the app logic.
 
-`src/styles.css` controls the paper interface, layout, keyboard, modal, gallery, reading panel, and final reveal transition.
+`src/styles.css` controls the paper interface, layout, keyboard, modal, gallery, and river container.
 
-`src/app.js` contains state management, encryption, local storage, sharing, Web Audio, the Matter.js gallery, and the p5.js WEBGL cinematic reveal.
+`src/app.js` contains state management, encryption, local storage, sharing, Web Audio, the Matter.js gallery, and the p5.js canvas-based river reveal.
 
 ## 3. Data And Privacy Model
 
@@ -79,50 +79,55 @@ This preserves the person-to-person mechanism: the gallery is built from the wri
 
 ## 6. Galaxy River Letter Phase
 
-The unlock scene is a cinematic p5.js WEBGL stage. It is designed around this emotional sequence:
+The unlock scene is now the "Milky Way Letter Dissolution" canvas stage. It is designed around this sequence:
 
-1. Warm darkness and a sealed floating envelope.
-2. The envelope opens after the correct key.
-3. A brief burst of soft pink rose particles explodes outward like compressed memories.
-4. The warm bloom dissolves and collapses downward into deep blue cosmic water.
-5. The writer's typed characters become falling star-glyphs.
-6. Star-glyphs hit the water, create ripples, bend reflections, and trigger delicate chimes.
-7. Motion slows into silence.
-8. A small white boat appears on the water and transforms into paper.
-9. The letter becomes fully readable at the end.
+1. A deep radial cosmic background appears with static stars and drifting blue nebula wisps.
+2. Every character from the recipient, title, and message is placed at its natural reading position on the canvas.
+3. On reveal, each character accelerates downward and inward toward an S-curved river axis.
+4. Characters rotate through two full turns, shrink from full size to a small mote, and leave short luminous comet tails.
+5. Each river impact spawns crystal micro-particles and extra sparkle flashes.
+6. The micro-particles flow along the S-curve with small perpendicular drift, pulsing instead of linearly fading.
+7. A small line-art paper boat floats left-to-right near the lower edge of the river path.
 
-The side reading panel stays hidden during the cinematic reveal and fades in only after the final paper moment, so early typography behaves as living motion instead of static UI text.
+The side reading panel is hidden when the river animation starts. The canvas is the letter; there is no final DOM-text fade-in for the river content.
 
 ## 7. Text As Living Particles
 
-The reveal does not use a sample letter. It reads characters from the decrypted user message:
+The reveal does not use a sample letter. It reads characters from the decrypted recipient, title, and message:
 
 ```js
-const glyphSource = [...`${plaintext.title || ""} ${plaintext.message || ""}`]
-  .filter((char) => char.trim());
+const letterText = [
+  plaintext.recipient ? `To ${plaintext.recipient}` : "",
+  plaintext.title || "Untitled letter",
+  "",
+  plaintext.message || ""
+].join("\n");
+const characters = [...letterText];
 ```
 
-Those characters become `glyphStars`. Some falling stars draw the actual letters; others draw pure star shapes. Each glyph has:
+Those characters become `CharacterParticle` objects. Whitespace still affects the natural layout, while visible characters draw as canvas glyphs. Each particle has:
 
-- sky start position;
-- water impact position;
-- fall duration;
-- sway and spin;
-- reflected position;
-- impact state for ripple and sound triggering.
+- its natural reading position;
+- a river impact point on the sigmoid/S-curve;
+- a staggered start time and fall duration;
+- a 4-6 point luminous tail;
+- 0 to 720 degree rotation;
+- 1.0 to 0.08 scale collapse;
+- an impact state that spawns micro-particles, sparkles, and chime feedback.
 
-The early scene prioritizes emotional motion. Full readability is intentionally delayed until the final boat-to-paper transformation and the reading panel fade-in.
+The early scene starts readable only because the characters begin in normal letter layout. Readability then dissolves into pattern as the letter becomes the river.
 
-## 8. Water And Reflections
+## 8. River Stream And Sparkles
 
-The WEBGL canvas uses a shader for the galaxy and water atmosphere:
+The river is a sigmoid/S-curved particle path across the canvas:
 
-- upper warmth fades into darkness;
-- the lower half becomes indigo cosmic water;
-- procedural stars appear in the distance;
-- moving wave terms create subtle water motion.
+- ambient river motes keep the path visible;
+- character impacts spawn 8-14 micro-particles;
+- micro-particles cycle through cream, gold, pale blue-gray, and white;
+- each micro-particle lives for 2.4-4 seconds, pulses with a sine wave, shrinks from 2px to 0, and floats upward near the end of life;
+- a continuous pool of crystal sparkles appears near the river and impact flashes add extra sparkle bursts.
 
-Foreground particles are rendered into a transparent p5 graphics buffer and composited over the WEBGL shader. Water impacts create ripple objects. Reflections are mirrored and displaced by both soft wave motion and nearby ripple influence, so falling letters appear to bend when they touch the water.
+The draw order is: static background and nebula, river particle stream, falling character particles, the small paper boat, then crystal sparkles.
 
 ## 9. Sound Design
 
@@ -176,12 +181,29 @@ Users can choose relationship, occasion, mood, and intensity. Natural-language d
 ## 12. Build Workflow
 
 1. Build the HTML structure for writing, gallery, and reveal.
-2. Use CSS for paper, layout, accessibility, and final panel transitions.
+2. Use CSS for paper, layout, accessibility, and the river container.
 3. Encrypt the user's letter with Web Crypto before saving.
 4. Use Matter.js for the writer's physical envelope gallery.
-5. Start a p5.js WEBGL canvas after successful unlock.
-6. Draw the galaxy and water atmosphere with a shader.
-7. Render particles, glyphs, ripples, reflections, boat, and paper into a transparent graphics buffer.
-8. Composite the buffer over the shader.
-9. Trigger Web Audio chimes from unlock and water impacts.
-10. Reveal the stable readable message only at the final stage.
+5. Start a p5.js canvas after successful unlock.
+6. Build the static star background once, then animate nebula wisps in the draw loop.
+7. Create one canvas particle per letter character and move it from reading layout into the S-curved river.
+8. Spawn river micro-particles and sparkle impacts when characters dissolve.
+9. Draw the paper boat and continuously refresh the sparkle pool.
+10. Trigger Web Audio chimes from unlock and river impacts.
+
+## 13. GitHub Pages Deployment
+
+This app is a static site, so it can be published with GitHub Pages:
+
+1. Push the latest `main` branch to GitHub.
+2. Open the repository on GitHub.
+3. Go to Settings -> Pages.
+4. Under "Build and deployment", choose "Deploy from a branch".
+5. Choose branch `main` and folder `/root`.
+6. Save and wait for GitHub to publish the site.
+
+After it finishes, the public URL should be:
+
+```text
+https://foamyfsky.github.io/Write_Letters/
+```

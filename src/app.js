@@ -21,7 +21,6 @@
     audioNeedsGesture: false,
     keySoundCounter: 0,
     toastTimer: 0,
-    revealTimer: 0,
   };
 
   const el = {};
@@ -1058,23 +1057,23 @@
   }
 
   function startRiver(record, plaintext) {
-    window.clearTimeout(state.revealTimer);
     state.currentRiver = { record, plaintext };
-    renderRiverLetter(plaintext);
+    renderRiverLetter();
     showView("river");
     playUnlockBloom();
     destroyRiverSketch();
     state.riverSketch = createRiverSketch(plaintext);
-    state.revealTimer = window.setTimeout(() => {
-      el.riverLetter.classList.remove("is-revealing");
-    }, 12800);
   }
 
-  function renderRiverLetter(plaintext) {
-    el.riverLetter.classList.add("is-revealing");
-    el.riverRecipient.textContent = plaintext.recipient ? `To ${plaintext.recipient}` : "";
-    el.riverLetterTitle.textContent = plaintext.title || "Untitled letter";
-    el.riverLetterMessage.textContent = plaintext.message || "";
+  function renderRiverLetter() {
+    el.riverLetter.classList.remove("is-revealing");
+    el.riverLetter.style.transition = "none";
+    el.riverLetter.style.opacity = "0";
+    el.riverLetter.style.pointerEvents = "none";
+    el.riverLetter.setAttribute("aria-hidden", "true");
+    el.riverRecipient.textContent = "";
+    el.riverLetterTitle.textContent = "";
+    el.riverLetterMessage.textContent = "";
   }
 
   function destroyRiverSketch() {
@@ -1084,1080 +1083,605 @@
     state.riverSketch = null;
   }
 
-  function createLegacyBloomSketch(plaintext) {
-    return new window.p5((p) => {
-      let targets = [];
-      let particles = [];
-      let petals = [];
-      let blooms = [];
-      let textBlock = null;
-      let spawnIndex = 0;
-      let stableAlpha = 0;
-      let frameStarted = false;
-      let startMillis = 0;
-      const lock = { x: 0, y: 0 };
-      const palette = ["#f6d34d", "#fff8b8", "#f4c845", "#ffffff", "#f3b2c7"];
-      const rosePalette = ["#b84555", "#d66d8f", "#e9a8bb", "#f4c6ce", "#f2d3b1"];
-      const glyphPool = [...`${plaintext.title || ""}${plaintext.message || ""}`]
-        .filter((char) => char.trim() && char !== "\n");
-
-      p.setup = () => {
-        p.pixelDensity(1);
-        const canvas = p.createCanvas(
-          Math.max(320, el.riverCanvas.clientWidth),
-          Math.max(440, el.riverCanvas.clientHeight),
-        );
-        canvas.parent(el.riverCanvas);
-        p.colorMode(p.RGB);
-        p.textFont("Georgia");
-        rebuildTargets();
-        resetParticles();
-      };
-
-      p.draw = () => {
-        if (!frameStarted) {
-          p.background(13, 42, 98);
-          frameStarted = true;
-        }
-        drawBackground();
-        drawFlowThreads();
-        drawEnvelope();
-        drawBouquet();
-        updatePetals();
-        spawnTextParticles();
-        particles.forEach((particle) => {
-          particle.update();
-          particle.draw();
-        });
-        stableAlpha = easeOutCubic(p.constrain((sceneFrame() - 300) / 120, 0, 1));
-        drawStableText(stableAlpha);
-      };
-
-      p.windowResized = () => {
-        const width = Math.max(320, el.riverCanvas.clientWidth);
-        const height = Math.max(440, el.riverCanvas.clientHeight);
-        p.resizeCanvas(width, height);
-        rebuildTargets();
-        resetParticles();
-      };
-
-      function rebuildTargets() {
-        lock.x = p.width * 0.5;
-        lock.y = p.height * 0.78;
-        const g = p.createGraphics(p.width, p.height);
-        g.pixelDensity(1);
-        g.clear();
-        g.textFont("Georgia");
-        g.noStroke();
-        g.fill(255);
-
-        textBlock = buildTextBlock(g, plaintext);
-        const startY = textBlock.y;
-        g.textSize(textBlock.size);
-        g.textLeading(textBlock.leading);
-        g.textAlign(p.LEFT, p.TOP);
-        textBlock.lines.forEach((line, index) => {
-          g.text(line, textBlock.x, startY + index * textBlock.leading);
-        });
-
-        g.loadPixels();
-        targets = [];
-        const step = p.width < 680 ? 5 : 4;
-        let glyphIndex = 0;
-        for (let y = 0; y < g.height; y += step) {
-          for (let x = 0; x < g.width; x += step) {
-            const alpha = g.pixels[(y * g.width + x) * 4 + 3];
-            if (alpha > 36) {
-              const glyph = glyphPool.length ? glyphPool[glyphIndex % glyphPool.length] : "*";
-              targets.push({ x, y, glyph, index: glyphIndex });
-              glyphIndex += 1;
-            }
-          }
-        }
-        const maxTargets = p.width < 680 ? 2600 : 5200;
-        targets.sort((a, b) => (a.y - b.y) || (a.x - b.x));
-        targets = targets.slice(0, maxTargets);
-        g.remove();
-        buildBloomTargets();
-      }
-
-      function buildTextBlock(g, letter) {
-        const maxWidth = p.width * (p.width < 680 ? 0.78 : 0.62);
-        const maxHeight = p.height * 0.42;
-        const toLine = letter.recipient ? `To ${letter.recipient}` : "";
-        const source = [toLine, letter.title, "", letter.message].filter((line, index) => {
-          return index < 3 || String(line || "").trim();
-        }).join("\n");
-        let size = Math.min(34, Math.max(18, p.width / 31));
-        let lines = [];
-        let leading = size * 1.38;
-        let wasTrimmed = false;
-
-        while (size >= 11) {
-          g.textSize(size);
-          lines = [];
-          source.split("\n").forEach((paragraph) => {
-            if (!paragraph.trim()) {
-              lines.push("");
-            } else {
-              lines.push(...wrapParagraph(g, paragraph.trim(), maxWidth));
-            }
-          });
-          leading = size * 1.38;
-          if (lines.length * leading <= maxHeight) break;
-          size -= 2;
-        }
-        const maxLines = Math.max(5, Math.floor(maxHeight / leading));
-        if (lines.length > maxLines) {
-          lines = lines.slice(0, maxLines - 1);
-          lines.push("...");
-          wasTrimmed = true;
-        }
-
-        return {
-          x: (p.width - maxWidth) / 2,
-          y: Math.max(48, p.height * 0.1),
-          size,
-          leading,
-          lines,
-          wasTrimmed,
-        };
-      }
-
-      function wrapParagraph(g, paragraph, maxWidth) {
-        const hasSpaces = /\s/.test(paragraph);
-        const tokens = hasSpaces ? paragraph.split(/\s+/) : [...paragraph];
-        const lines = [];
-        let line = "";
-        tokens.forEach((token) => {
-          const next = hasSpaces ? `${line}${line ? " " : ""}${token}` : `${line}${token}`;
-          if (g.textWidth(next) <= maxWidth || !line) {
-            line = next;
-          } else {
-            lines.push(line);
-            line = token;
-          }
-        });
-        if (line) lines.push(line);
-        return lines;
-      }
-
-      function resetParticles() {
-        particles = [];
-        petals = [];
-        spawnIndex = 0;
-        stableAlpha = 0;
-        frameStarted = false;
-        startMillis = p.millis();
-        createPetals();
-      }
-
-      function sceneFrame() {
-        return (p.millis() - startMillis) / 16.67;
-      }
-
-      function buildBloomTargets() {
-        blooms = [];
-        const centerX = p.width * 0.5;
-        const topY = p.height * 0.54;
-        const count = p.width < 680 ? 7 : 11;
-        for (let i = 0; i < count; i += 1) {
-          const row = i % 3;
-          const spread = p.map(i, 0, count - 1, -1, 1);
-          blooms.push({
-            start: p.createVector(lock.x, lock.y - 6),
-            target: p.createVector(
-              centerX + spread * p.width * 0.19 + Math.sin(i * 1.9) * 16,
-              topY + row * 20 + Math.cos(i * 1.4) * 14,
-            ),
-            radius: p.random(23, p.width < 680 ? 34 : 44),
-            color: rosePalette[i % rosePalette.length],
-            delay: i * 4,
-            spin: p.random(-0.7, 0.7),
-          });
-        }
-      }
-
-      function createPetals() {
-        const count = p.width < 680 ? 42 : 68;
-        for (let i = 0; i < count; i += 1) {
-          const angle = p.random(-p.PI * 0.95, -p.PI * 0.05);
-          const distance = p.random(p.width * 0.08, p.width * 0.42);
-          petals.push(new Petal(
-            lock.x,
-            lock.y,
-            lock.x + Math.cos(angle) * distance,
-            lock.y + Math.sin(angle) * distance - p.random(20, 120),
-            i,
-          ));
-        }
-      }
-
-      function spawnTextParticles() {
-        const frame = sceneFrame();
-        if (frame < 62) return;
-        const progress = p.constrain((frame - 62) / 250, 0, 1);
-        const desiredCount = Math.floor(targets.length * easeOutCubic(progress));
-        const rate = Math.max(18, Math.ceil(targets.length / 80));
-        for (let i = 0; i < rate && spawnIndex < targets.length && spawnIndex <= desiredCount; i += 1) {
-          const target = targets[spawnIndex];
-          particles.push(new TextParticle(target, spawnIndex));
-          spawnIndex += 1;
-        }
-      }
-
-      function drawBackground() {
-        const ctx = p.drawingContext;
-        ctx.save();
-        const gradient = ctx.createLinearGradient(0, 0, p.width, p.height);
-        gradient.addColorStop(0, "#092a72");
-        gradient.addColorStop(0.45, "#143b83");
-        gradient.addColorStop(1, "#1f5aaf");
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, p.width, p.height);
-        ctx.restore();
-
-        p.noStroke();
-        for (let i = 0; i < 36; i += 1) {
-          const x = (i * 97 + p.frameCount * 0.18) % p.width;
-          const y = (i * 53) % p.height;
-          p.fill(255, 248, 232, 8 + (i % 3) * 4);
-          p.circle(x, y, 1.2 + (i % 4));
-        }
-      }
-
-      function drawFlowThreads() {
-        const frame = sceneFrame();
-        p.noFill();
-        p.stroke(255, 248, 232, 30);
-        p.strokeWeight(1);
-        for (let i = 0; i < 7; i += 1) {
-          const x = p.map(i, 0, 6, p.width * 0.13, p.width * 0.87);
-          p.beginShape();
-          for (let y = 48; y < p.height - 30; y += 34) {
-            const wave = Math.sin(y * 0.017 + i + frame * 0.012) * 16;
-            p.curveVertex(x + wave, y);
-          }
-          p.endShape();
-        }
-      }
-
-      function drawEnvelope() {
-        const frame = sceneFrame();
-        const open = easeOutCubic(p.constrain((frame - 24) / 80, 0, 1));
-        const burst = p.constrain((frame - 38) / 50, 0, 1);
-        const width = Math.min(180, p.width * 0.32);
-        const height = width * 0.58;
-        const x = lock.x;
-        const y = lock.y + 8;
-
-        p.push();
-        p.translate(x, y);
-        p.noStroke();
-        p.fill(0, 0, 0, 38);
-        p.rect(-width / 2 + 6, -height / 2 + 8, width, height, 8);
-        p.fill(255, 248, 232, 234);
-        p.rect(-width / 2, -height / 2, width, height, 8);
-        p.stroke(150, 106, 67, 120);
-        p.strokeWeight(1.2);
-        p.line(-width / 2, -height / 2, 0, 2);
-        p.line(width / 2, -height / 2, 0, 2);
-        p.line(-width / 2, height / 2, -10, 0);
-        p.line(width / 2, height / 2, 10, 0);
-        p.noStroke();
-        p.fill(255, 235, 183, 190);
-        p.beginShape();
-        p.vertex(-width / 2, -height / 2);
-        p.vertex(0, -height / 2 - open * 52);
-        p.vertex(width / 2, -height / 2);
-        p.vertex(0, 2);
-        p.endShape(p.CLOSE);
-        p.fill(157, 45, 40, 230);
-        p.circle(0, 4, 24 + Math.sin(p.frameCount * 0.17) * 1.5);
-        p.fill(255, 248, 232, 220 * open);
-        p.circle(0, 4, 7 + open * 4);
-        p.pop();
-
-        if (burst > 0 && burst < 1) {
-          p.push();
-          p.translate(lock.x, lock.y);
-          p.stroke(255, 248, 184, 170 * (1 - burst));
-          p.strokeWeight(1.2);
-          for (let i = 0; i < 18; i += 1) {
-            const angle = (i / 18) * p.TWO_PI + p.frameCount * 0.01;
-            const inner = 12 + burst * 12;
-            const outer = 38 + burst * 150;
-            p.line(Math.cos(angle) * inner, Math.sin(angle) * inner, Math.cos(angle) * outer, Math.sin(angle) * outer);
-          }
-          p.pop();
-        }
-      }
-
-      function drawBouquet() {
-        const frame = sceneFrame();
-        const global = easeOutCubic(p.constrain((frame - 18) / 120, 0, 1));
-        if (global <= 0) return;
-
-        p.push();
-        p.stroke(71, 119, 103, 150 * global);
-        p.strokeWeight(1.15);
-        blooms.forEach((bloom) => {
-          const head = window.p5.Vector.lerp(bloom.start, bloom.target, global);
-          p.line(lock.x, lock.y + 6, head.x, head.y + bloom.radius * 0.42);
-        });
-        p.pop();
-
-        blooms.forEach((bloom) => {
-          const local = easeOutBack(p.constrain((frame - 34 - bloom.delay) / 78, 0, 1));
-          if (local <= 0) return;
-          const pos = window.p5.Vector.lerp(bloom.start, bloom.target, local);
-          const radius = bloom.radius * local;
-          drawRose(pos.x, pos.y, radius, bloom.color, bloom.spin + p.frameCount * 0.003);
-        });
-      }
-
-      function updatePetals() {
-        petals.forEach((petal) => {
-          petal.update();
-          petal.draw();
-        });
-      }
-
-      function drawStableText(alpha) {
-        if (!textBlock || alpha <= 0) return;
-        p.push();
-        p.noStroke();
-        p.textFont("Georgia");
-        p.textAlign(p.LEFT, p.TOP);
-        p.textSize(textBlock.size);
-        p.textLeading(textBlock.leading);
-        p.fill(8, 21, 38, 150 * alpha);
-        textBlock.lines.forEach((line, index) => {
-          p.text(line, textBlock.x + 2, textBlock.y + index * textBlock.leading + 2, p.width - textBlock.x * 2);
-        });
-        p.fill(255, 248, 232, 235 * alpha);
-        textBlock.lines.forEach((line, index) => {
-          p.text(line, textBlock.x, textBlock.y + index * textBlock.leading, p.width - textBlock.x * 2);
-        });
-        p.pop();
-      }
-
-      class TextParticle {
-        constructor(target, index) {
-          const angle = p.random(-p.PI, 0);
-          const radius = p.random(6, 44);
-          this.pos = p.createVector(lock.x + Math.cos(angle) * radius, lock.y + Math.sin(angle) * radius);
-          this.vel = p.createVector(Math.cos(angle) * p.random(1.5, 4.8), Math.sin(angle) * p.random(1.5, 4.8));
-          this.acc = p.createVector(0, 0);
-          this.target = p.createVector(target.x, target.y);
-          this.glyph = target.glyph || "*";
-          this.size = p.random(2.1, 4.8);
-          this.maxSpeed = p.random(4.2, 7.8);
-          this.maxForce = p.random(0.13, 0.32);
-          this.color = palette[Math.floor(p.random(palette.length))];
-          this.kind = index % 7 === 0 ? "glyph" : index % 11 === 0 ? "star" : "dot";
-          this.phase = p.random(p.TWO_PI);
-          this.settled = false;
-        }
-
-        update() {
-          const desired = window.p5.Vector.sub(this.target, this.pos);
-          const distance = desired.mag();
-          let speed = this.maxSpeed;
-          if (distance < 86) speed = p.map(distance, 0, 86, 0.05, this.maxSpeed);
-          desired.setMag(speed);
-          const steer = window.p5.Vector.sub(desired, this.vel);
-          steer.limit(this.maxForce);
-          const flowAngle = p.noise(this.pos.x * 0.004, this.pos.y * 0.004, p.frameCount * 0.008) * p.TWO_PI * 2;
-          const flow = p.createVector(Math.cos(flowAngle), Math.sin(flowAngle)).mult(distance > 34 ? 0.045 : 0.012);
-          this.acc.add(steer);
-          this.acc.add(flow);
-          this.vel.add(this.acc);
-          this.vel.mult(distance < 28 ? 0.86 : 0.982);
-          this.pos.add(this.vel);
-          this.acc.mult(0);
-          if (distance < 1.4) {
-            this.pos.lerp(this.target, 0.4);
-            this.vel.mult(0);
-            this.settled = true;
-          }
-        }
-
-        draw() {
-          const ctx = p.drawingContext;
-          ctx.save();
-          ctx.shadowBlur = this.settled ? 7 : 15;
-          ctx.shadowColor = `rgba(246, 211, 77, ${0.72 - stableAlpha * 0.42})`;
-          p.noStroke();
-          const particleColor = p.color(this.color);
-          particleColor.setAlpha(this.settled ? 230 - stableAlpha * 150 : 235);
-          p.fill(particleColor);
-          if (this.kind === "glyph") {
-            p.textAlign(p.CENTER, p.CENTER);
-            p.textFont("Georgia");
-            p.textSize(this.size * 3.2);
-            p.text(this.glyph, this.pos.x, this.pos.y);
-          } else if (this.kind === "star") {
-            const pulse = 0.85 + Math.sin(p.frameCount * 0.08 + this.phase) * 0.22;
-            drawStar(this.pos.x, this.pos.y, this.size * 0.5 * pulse, this.size * 1.38 * pulse, 5);
-          } else {
-            const pulse = this.settled ? 0.85 + Math.sin(p.frameCount * 0.07 + this.phase) * 0.18 : 1;
-            p.circle(this.pos.x, this.pos.y, this.size * pulse);
-          }
-          ctx.restore();
-        }
-      }
-
-      class Petal {
-        constructor(startX, startY, targetX, targetY, index) {
-          this.start = p.createVector(startX, startY);
-          this.target = p.createVector(targetX, targetY);
-          this.pos = this.start.copy();
-          this.index = index;
-          this.size = p.random(8, 19);
-          this.delay = p.random(18, 76);
-          this.phase = p.random(p.TWO_PI);
-          this.color = p.random(["#f4b7c6", "#eaa3b7", "#f0c4cd", "#f2d3b1"]);
-        }
-
-        update() {
-          const frame = sceneFrame();
-          const t = p.constrain((frame - this.delay) / 135, 0, 1);
-          const eased = easeOutCubic(t);
-          this.pos = window.p5.Vector.lerp(this.start, this.target, eased);
-          if (t >= 1) {
-            this.pos.x += Math.sin(p.frameCount * 0.018 + this.phase) * 18;
-            this.pos.y += Math.sin(p.frameCount * 0.012 + this.phase) * 9;
-          }
-        }
-
-        draw() {
-          const frame = sceneFrame();
-          const t = p.constrain((frame - this.delay) / 135, 0, 1);
-          if (t <= 0) return;
-          p.push();
-          p.translate(this.pos.x, this.pos.y);
-          p.rotate(Math.sin(p.frameCount * 0.026 + this.phase) * 0.9);
-          p.noStroke();
-          p.fill(this.color + Math.floor(190 * (1 - t * 0.35)).toString(16).padStart(2, "0"));
-          p.ellipse(0, 0, this.size * 0.76, this.size * 1.25);
-          p.pop();
-        }
-      }
-
-      function drawRose(x, y, radius, color, rotation) {
-        p.push();
-        p.translate(x, y);
-        p.rotate(rotation);
-        const ctx = p.drawingContext;
-        ctx.save();
-        ctx.shadowBlur = 16;
-        ctx.shadowColor = "rgba(255, 190, 210, 0.45)";
-        p.noStroke();
-        p.fill(color);
-        p.circle(0, 0, radius * 1.55);
-        for (let ring = 4; ring >= 1; ring -= 1) {
-          const petalsInRing = ring * 5;
-          const ringRadius = radius * (ring / 5);
-          p.fill(lightenColor(color, ring * 14));
-          for (let i = 0; i < petalsInRing; i += 1) {
-            p.push();
-            const angle = (i / petalsInRing) * p.TWO_PI + ring * 0.38;
-            p.rotate(angle);
-            p.translate(ringRadius * 0.48, 0);
-            p.ellipse(0, 0, radius * 0.22 + ring * 1.6, radius * 0.55);
-            p.pop();
-          }
-        }
-        p.fill(255, 236, 226, 180);
-        p.circle(0, 0, radius * 0.22);
-        ctx.restore();
-        p.pop();
-      }
-
-      function drawStar(x, y, innerRadius, outerRadius, points) {
-        p.beginShape();
-        for (let i = 0; i < points * 2; i += 1) {
-          const angle = -p.HALF_PI + (i * p.PI) / points;
-          const radius = i % 2 === 0 ? outerRadius : innerRadius;
-          p.vertex(x + Math.cos(angle) * radius, y + Math.sin(angle) * radius);
-        }
-        p.endShape(p.CLOSE);
-      }
-
-      function easeOutCubic(t) {
-        return 1 - Math.pow(1 - t, 3);
-      }
-
-      function easeOutBack(t) {
-        const c1 = 1.70158;
-        const c3 = c1 + 1;
-        return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
-      }
-
-      function lightenColor(hex, amount) {
-        const value = hex.replace("#", "");
-        const r = Math.min(255, parseInt(value.slice(0, 2), 16) + amount);
-        const g = Math.min(255, parseInt(value.slice(2, 4), 16) + amount);
-        const b = Math.min(255, parseInt(value.slice(4, 6), 16) + amount);
-        return `rgb(${r}, ${g}, ${b})`;
-      }
-    }, el.riverCanvas);
-  }
-
   function createRiverSketch(plaintext) {
     return new window.p5((p) => {
-      const VERTEX_SHADER = `
-        precision mediump float;
-        attribute vec3 aPosition;
-        varying vec2 vUv;
+      const MICRO_COLORS = [
+        { rgb: [255, 248, 232], alpha: 1 },
+        { rgb: [244, 200, 69], alpha: 1 },
+        { rgb: [185, 200, 197], alpha: 1 },
+        { rgb: [255, 255, 255], alpha: 0.9 },
+      ];
 
-        void main() {
-          vUv = aPosition.xy * 0.5 + 0.5;
-          gl_Position = vec4(aPosition.xy, 0.0, 1.0);
-        }
-      `;
-      const GALAXY_SHADER = `
-        precision mediump float;
-        uniform vec2 u_resolution;
-        uniform float u_time;
-        uniform float u_collapse;
-        varying vec2 vUv;
-
-        float hash(vec2 p) {
-          return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
-        }
-
-        float softStar(vec2 uv, float scale) {
-          vec2 cell = floor(uv * scale);
-          vec2 local = fract(uv * scale) - 0.5;
-          float seed = hash(cell);
-          float d = length(local);
-          return smoothstep(0.034, 0.0, d) * step(0.982, seed);
-        }
-
-        void main() {
-          vec2 uv = vUv;
-          float waterLine = 0.58;
-          float warm = 1.0 - smoothstep(0.18, 0.72, uv.y);
-          float water = smoothstep(waterLine - 0.04, waterLine + 0.08, uv.y);
-          float wave = sin((uv.x * 24.0) + u_time * 0.45) * 0.006;
-          wave += sin((uv.x * 9.0) - u_time * 0.22) * 0.009;
-
-          vec3 darkTop = mix(vec3(0.035, 0.02, 0.055), vec3(0.03, 0.035, 0.12), u_collapse);
-          vec3 warmGlow = vec3(0.45, 0.16, 0.18) * warm * (1.0 - u_collapse * 0.72);
-          vec3 galaxy = vec3(0.018, 0.03, 0.08);
-          galaxy += vec3(0.035, 0.06, 0.18) * smoothstep(0.1, 0.95, uv.y);
-          galaxy += vec3(0.08, 0.035, 0.13) * smoothstep(0.25, 0.85, sin(uv.x * 4.2 + uv.y * 5.0 + u_time * 0.04) * 0.5 + 0.5) * u_collapse * 0.38;
-
-          vec3 color = mix(darkTop + warmGlow, galaxy, u_collapse);
-          vec3 waterColor = vec3(0.008, 0.018, 0.055) + vec3(0.025, 0.055, 0.16) * (1.0 - uv.y + wave);
-          color = mix(color, waterColor, water * u_collapse);
-
-          float stars = softStar(uv + vec2(u_time * 0.002, 0.0), 88.0);
-          stars += softStar(uv + vec2(0.13, u_time * 0.001), 142.0) * 0.75;
-          color += vec3(0.86, 0.91, 1.0) * stars * u_collapse;
-
-          float horizon = smoothstep(waterLine + 0.01, waterLine - 0.01, abs(uv.y - waterLine));
-          color += vec3(0.25, 0.37, 0.58) * horizon * u_collapse * 0.25;
-
-          gl_FragColor = vec4(color, 1.0);
-        }
-      `;
-
-      let bgShader = null;
-      let scene;
-      let layout;
-      let roseParticles = [];
-      let glyphStars = [];
-      let dust = [];
-      let ripples = [];
+      let backgroundLayer = null;
+      let layout = null;
+      let characterParticles = [];
+      let microParticles = [];
+      let ambientStream = [];
+      let sparkles = [];
+      let nebulaWisps = [];
       let startMillis = 0;
+      let lastMillis = 0;
+      let sparkleTarget = 40;
       let lastChimeAt = 0;
       let chimeCount = 0;
 
-      const roseColors = [
-        [244, 173, 190],
-        [225, 104, 142],
-        [255, 206, 214],
-        [207, 73, 104],
-        [246, 190, 154],
-      ];
-
       p.setup = () => {
         p.pixelDensity(1);
+        p.frameRate(60);
         const canvas = p.createCanvas(
           Math.max(320, el.riverCanvas.clientWidth),
           Math.max(440, el.riverCanvas.clientHeight),
-          p.WEBGL,
         );
         canvas.parent(el.riverCanvas);
-        p.noStroke();
-        bgShader = p.createShader(VERTEX_SHADER, GALAXY_SHADER);
-        scene = createSceneLayer(p.width, p.height);
+        p.textFont("Georgia");
         resetScene();
       };
 
       p.draw = () => {
         const t = elapsed();
-        const collapse = easeInOutCubic(p.constrain((t - 2.0) / 1.65, 0, 1));
-        drawGalaxyShader(t, collapse);
-        p.resetShader();
-        drawSceneBuffer(t, collapse);
+        const now = p.millis();
+        const dt = Math.min(2, Math.max(0.25, (now - lastMillis) / 16.67));
+        lastMillis = now;
+
+        p.blendMode(p.BLEND);
+        p.drawingContext.drawImage(backgroundLayer, 0, 0, p.width, p.height);
+        updateNebulaWisps(dt);
+        drawNebulaWisps();
+        drawRiverGlow(t);
+        drawAmbientRiver(t);
+        updateMicroParticles(t);
+        updateCharacterParticles(t);
+        drawBoat(t);
+        updateSparkles(t);
       };
 
       p.windowResized = () => {
         const width = Math.max(320, el.riverCanvas.clientWidth);
         const height = Math.max(440, el.riverCanvas.clientHeight);
         p.resizeCanvas(width, height);
-        scene = createSceneLayer(width, height);
         resetScene();
       };
 
       p.cleanup = () => {
-        if (scene && typeof scene.remove === "function") scene.remove();
+        backgroundLayer = null;
       };
-
-      function createSceneLayer(width, height) {
-        if (scene && typeof scene.remove === "function") scene.remove();
-        const layer = p.createGraphics(width, height);
-        layer.pixelDensity(1);
-        layer.textFont("Georgia");
-        const canvasNode = layer.elt || layer.canvas;
-        canvasNode.classList.add("cinematic-overlay");
-        canvasNode.setAttribute("aria-hidden", "true");
-        el.riverCanvas.appendChild(canvasNode);
-        return layer;
-      }
 
       function resetScene() {
         startMillis = p.millis();
+        lastMillis = startMillis;
         lastChimeAt = 0;
         chimeCount = 0;
+        backgroundLayer = buildBackgroundLayer();
         layout = buildLetterLayout();
-        roseParticles = buildRoseParticles();
-        glyphStars = buildGlyphStars();
-        dust = buildDust();
-        ripples = [];
+        characterParticles = buildCharacterParticles(layout.characters);
+        microParticles = [];
+        ambientStream = buildAmbientStream();
+        nebulaWisps = buildNebulaWisps();
+        sparkleTarget = Math.floor(p.random(30, 51));
+        sparkles = [];
+        while (sparkles.length < sparkleTarget) {
+          sparkles.push(createSparkle(null, null, null, elapsed() - p.random(0, 1.1)));
+        }
       }
 
       function elapsed() {
         return (p.millis() - startMillis) / 1000;
       }
 
-      function drawGalaxyShader(t, collapse) {
-        p.shader(bgShader);
-        bgShader.setUniform("u_resolution", [p.width, p.height]);
-        bgShader.setUniform("u_time", t);
-        bgShader.setUniform("u_collapse", collapse);
-        p.quad(-1, -1, 1, -1, 1, 1, -1, 1);
-      }
+      function buildBackgroundLayer() {
+        const layer = document.createElement("canvas");
+        layer.width = p.width;
+        layer.height = p.height;
+        const ctx = layer.getContext("2d");
+        const gradient = ctx.createRadialGradient(
+          p.width * 0.5,
+          p.height * 0.48,
+          0,
+          p.width * 0.5,
+          p.height * 0.5,
+          Math.max(p.width, p.height) * 0.74,
+        );
+        gradient.addColorStop(0, "#040d21");
+        gradient.addColorStop(1, "#000510");
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, p.width, p.height);
 
-      function drawSceneBuffer(t, collapse) {
-        scene.clear();
-        const shake = emotionalShake(t);
-        scene.push();
-        scene.translate(shake.x, shake.y);
-        drawUpperAtmosphere(t, collapse);
-        drawEnvelope(t, collapse);
-        updateRoseParticles(t, collapse);
-        updateGlyphStars(t, collapse);
-        drawRipples(t, collapse);
-        drawBoatAndPaper(t);
-        scene.pop();
-      }
-
-      function drawUpperAtmosphere(t, collapse) {
-        scene.noStroke();
-        const glowAlpha = 92 * (1 - collapse);
-        drawGlow(p.width * 0.5, p.height * 0.36, p.width * 0.5, [240, 142, 159], glowAlpha);
-        for (let i = 0; i < dust.length; i += 1) {
-          const item = dust[i];
-          const drift = Math.sin(t * item.speed + item.phase) * 12;
-          const y = item.y + Math.sin(t * 0.22 + item.phase) * 7;
-          const alpha = item.alpha * (1 - collapse * 0.65);
-          scene.fill(255, 218, 176, alpha);
-          scene.circle(item.x + drift, y, item.size);
+        const starCount = Math.floor(p.random(140, 181));
+        for (let i = 0; i < starCount; i += 1) {
+          const radius = p.random(0.4, 1.2);
+          const alpha = p.random(0.3, 0.9);
+          ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+          ctx.beginPath();
+          ctx.arc(p.random(p.width), p.random(p.height), radius, 0, Math.PI * 2);
+          ctx.fill();
         }
+        return layer;
       }
 
-      function drawEnvelope(t, collapse) {
-        const open = easeOutCubic(p.constrain((t - 0.5) / 0.82, 0, 1));
-        const fade = 1 - easeInOutCubic(p.constrain((t - 2.05) / 1.2, 0, 1));
-        if (fade <= 0.01) return;
-        const cx = p.width * 0.5;
-        const cy = p.height * 0.44 + Math.sin(t * 1.1) * 4 + collapse * p.height * 0.26;
-        const width = Math.min(220, p.width * 0.36);
-        const height = width * 0.6;
-        const alpha = 230 * fade;
-
-        scene.push();
-        scene.translate(cx, cy);
-        scene.noStroke();
-        scene.fill(0, 0, 0, 55 * fade);
-        scene.rect(-width / 2 + 8, -height / 2 + 10, width, height, 9);
-        scene.fill(255, 246, 222, alpha);
-        scene.rect(-width / 2, -height / 2, width, height, 9);
-        scene.stroke(148, 106, 75, 120 * fade);
-        scene.strokeWeight(1.1);
-        scene.line(-width / 2, -height / 2, 0, 8);
-        scene.line(width / 2, -height / 2, 0, 8);
-        scene.line(-width / 2, height / 2, -8, 4);
-        scene.line(width / 2, height / 2, 8, 4);
-        scene.noStroke();
-        scene.fill(255, 222, 190, 170 * fade);
-        scene.beginShape();
-        scene.vertex(-width / 2, -height / 2);
-        scene.vertex(0, -height / 2 - open * 72);
-        scene.vertex(width / 2, -height / 2);
-        scene.vertex(0, 8);
-        scene.endShape(scene.CLOSE);
-        scene.fill(157, 45, 40, 220 * fade);
-        scene.circle(0, 10, 25);
-        scene.fill(255, 240, 225, 180 * open * fade);
-        scene.circle(0, 10, 9 + open * 4);
-        scene.pop();
-      }
-
-      function updateRoseParticles(t, collapse) {
-        const burst = p.constrain((t - 0.72) / 1.0, 0, 1);
-        const dissolve = p.constrain((t - 1.55) / 1.15, 0, 1);
-        const pull = easeInCubic(p.constrain((t - 2.0) / 1.65, 0, 1));
-        if (burst <= 0) return;
-
-        scene.push();
-        scene.blendMode(scene.BLEND);
-        roseParticles.forEach((rose) => {
-          const origin = layout.envelope;
-          const explosive = easeOutCubic(burst);
-          const memoryX = origin.x + rose.vx * explosive + Math.sin(t * rose.wobble + rose.phase) * 18 * (1 - pull);
-          const memoryY = origin.y + rose.vy * explosive + rose.gravity * burst * burst;
-          const galaxyX = p.lerp(memoryX, rose.sinkX, pull);
-          const galaxyY = p.lerp(memoryY, layout.waterY + rose.sinkDepth, pull);
-          const alpha = rose.alpha * (1 - dissolve * 0.7) * (1 - pull * 0.86);
-          const size = rose.size * (0.55 + explosive * 0.75) * (1 - pull * 0.45);
-          if (alpha <= 1 || size <= 0.5) return;
-          drawRoseParticle(galaxyX, galaxyY, size, rose.color, alpha, rose.rotation + t * rose.spin);
-          if (rose.index % 7 === 0) {
-            scene.stroke(255, 204, 215, alpha * 0.18);
-            scene.line(origin.x, origin.y, galaxyX, galaxyY);
-          }
-        });
-        scene.pop();
-      }
-
-      function updateGlyphStars(t, collapse) {
-        const active = easeInOutCubic(p.constrain((t - 2.7) / 1.25, 0, 1));
-        if (active <= 0) return;
-
-        scene.push();
-        glyphStars.forEach((star) => {
-          const local = p.constrain((t - star.start) / star.duration, 0, 1);
-          if (local <= 0) return;
-          const fall = easeInOutCubic(local);
-          const sway = Math.sin(t * star.swaySpeed + star.phase) * star.sway * (1 - fall * 0.45);
-          const x = p.lerp(star.skyX, star.waterX, fall) + sway;
-          const y = p.lerp(star.skyY, star.waterY, fall);
-          const alpha = 210 * active * (1 - p.constrain((t - 11.3) / 1.8, 0, 1));
-          const rotate = star.rotation + t * star.spin;
-
-          if (!star.impacted && local >= 1) {
-            star.impacted = true;
-            ripples.push({ x, y: layout.waterY, born: t, strength: star.isLetter ? 1.0 : 0.62 });
-            if (t - lastChimeAt > 0.08 && chimeCount < 42) {
-              lastChimeAt = t;
-              chimeCount += 1;
-              playWaterChime(star.isLetter ? 1 : 0.65, p.map(x, 0, p.width, -0.65, 0.65));
-            }
-          }
-
-          if (y < layout.waterY + 8) {
-            drawStarOrLetter(x, y, star, alpha, rotate);
-          }
-          drawReflection(x, y, star, alpha * 0.42, rotate, t);
-        });
-        scene.pop();
-      }
-
-      function drawRipples(t, collapse) {
-        if (collapse < 0.35) return;
-        scene.push();
-        scene.noFill();
-        ripples = ripples.filter((ripple) => t - ripple.born < 2.4);
-        ripples.forEach((ripple) => {
-          const age = t - ripple.born;
-          const radius = age * 46 * ripple.strength;
-          const alpha = 115 * (1 - age / 2.4) * collapse;
-          scene.stroke(180, 215, 255, alpha);
-          scene.strokeWeight(1);
-          scene.ellipse(ripple.x, ripple.y, radius * 2.4, radius * 0.52);
-          scene.stroke(255, 220, 235, alpha * 0.42);
-          scene.ellipse(ripple.x, ripple.y, radius * 1.3, radius * 0.28);
-        });
-        scene.pop();
-      }
-
-      function drawBoatAndPaper(t) {
-        const appear = easeOutCubic(p.constrain((t - 8.1) / 1.2, 0, 1));
-        if (appear <= 0) return;
-        const paper = easeInOutCubic(p.constrain((t - 10.1) / 2.2, 0, 1));
-        const cx = p.width * 0.5 + Math.sin(t * 0.34) * 12 * (1 - paper);
-        const cy = layout.waterY + p.height * 0.13 + Math.sin(t * 0.7) * 3;
-        const boatW = Math.min(144, p.width * 0.28);
-        const paperW = Math.min(430, p.width * 0.66);
-        const paperH = Math.min(300, p.height * 0.48);
-
-        scene.push();
-        scene.translate(cx, cy);
-        scene.noStroke();
-        scene.fill(255, 255, 255, 220 * appear * (1 - paper));
-        scene.beginShape();
-        scene.vertex(-boatW / 2, -8);
-        scene.vertex(boatW / 2, -8);
-        scene.vertex(boatW * 0.28, 20);
-        scene.vertex(-boatW * 0.28, 20);
-        scene.endShape(scene.CLOSE);
-        scene.fill(225, 235, 250, 170 * appear * (1 - paper));
-        scene.triangle(-boatW * 0.44, -8, -5, -54, 8, -8);
-        scene.triangle(10, -8, boatW * 0.4, -46, boatW * 0.45, -8);
-
-        if (paper > 0) {
-          const w = p.lerp(boatW, paperW, paper);
-          const h = p.lerp(64, paperH, paper);
-          scene.fill(255, 248, 232, 225 * paper);
-          scene.rect(-w / 2, -h / 2, w, h, 7);
-          scene.stroke(157, 45, 40, 34 * paper);
-          scene.strokeWeight(1);
-          for (let y = -h / 2 + 42; y < h / 2 - 18; y += 28) {
-            scene.line(-w / 2 + 28, y, w / 2 - 28, y);
-          }
-          drawFinalPaperText(-w / 2 + 30, -h / 2 + 28, w - 60, h - 54, paper);
+      function buildNebulaWisps() {
+        const count = Math.floor(p.random(3, 6));
+        const wisps = [];
+        for (let i = 0; i < count; i += 1) {
+          const angle = p.random(p.TWO_PI);
+          const speed = p.random(0.08, 0.2);
+          wisps.push({
+            x: p.random(p.width),
+            y: p.random(p.height * 0.16, p.height * 0.84),
+            rx: p.random(80, 160),
+            ry: p.random(34, 82),
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed * 0.42,
+            rotation: p.random(-0.8, 0.8),
+          });
         }
-        scene.pop();
+        return wisps;
       }
 
-      function drawFinalPaperText(x, y, width, height, alpha) {
-        scene.push();
-        scene.textFont("Georgia");
-        scene.noStroke();
-        const textAlpha = 235 * easeOutCubic(p.constrain((alpha - 0.35) / 0.65, 0, 1));
-        scene.fill(23, 33, 29, textAlpha);
-        scene.textAlign(scene.LEFT, scene.TOP);
-        scene.textSize(layout.paperSize);
-        scene.textLeading(layout.paperLeading);
-        const maxLines = Math.max(2, Math.floor(height / layout.paperLeading));
-        const lines = layout.paperLines.slice(0, maxLines);
-        lines.forEach((line, index) => {
-          scene.text(line, x, y + index * layout.paperLeading, width);
+      function updateNebulaWisps(dt) {
+        nebulaWisps.forEach((wisp) => {
+          wisp.x += wisp.vx * dt;
+          wisp.y += wisp.vy * dt;
+          if (wisp.x < -wisp.rx) wisp.x = p.width + wisp.rx;
+          if (wisp.x > p.width + wisp.rx) wisp.x = -wisp.rx;
+          if (wisp.y < -wisp.ry) wisp.y = p.height + wisp.ry;
+          if (wisp.y > p.height + wisp.ry) wisp.y = -wisp.ry;
         });
-        scene.pop();
       }
 
-      function drawStarOrLetter(x, y, star, alpha, rotation) {
-        scene.push();
-        scene.translate(x, y);
-        scene.rotate(rotation);
-        scene.blendMode(scene.ADD);
-        drawGlow(0, 0, star.size * 7, star.isLetter ? [255, 237, 190] : [176, 208, 255], alpha * 0.55);
-        scene.fill(255, 248, 218, alpha);
-        scene.noStroke();
-        if (star.isLetter) {
-          scene.textFont("Georgia");
-          scene.textAlign(scene.CENTER, scene.CENTER);
-          scene.textSize(star.size * 2.6);
-          scene.text(star.char, 0, 0);
-        } else {
-          drawTinyStar(0, 0, star.size * 0.45, star.size * 1.3, 5);
-        }
-        scene.blendMode(scene.BLEND);
-        scene.pop();
-      }
-
-      function drawReflection(x, y, star, alpha, rotation, t) {
-        if (y < layout.waterY - 26) return;
-        const reflectedY = layout.waterY + Math.abs(y - layout.waterY) * 0.55 + 8;
-        let rippleBend = 0;
-        ripples.forEach((ripple) => {
-          const age = t - ripple.born;
-          const reach = 58 + age * 52;
-          const influence = Math.max(0, 1 - Math.abs(x - ripple.x) / reach) * Math.max(0, 1 - age / 2.4);
-          rippleBend += Math.sin(Math.abs(x - ripple.x) * 0.11 - age * 5.2) * influence * 18 * ripple.strength;
+      function drawNebulaWisps() {
+        const ctx = p.drawingContext;
+        nebulaWisps.forEach((wisp) => {
+          ctx.save();
+          ctx.translate(wisp.x, wisp.y);
+          ctx.rotate(wisp.rotation);
+          ctx.scale(wisp.rx, wisp.ry);
+          const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+          gradient.addColorStop(0, "rgba(32,87,187,0.07)");
+          gradient.addColorStop(1, "rgba(32,87,187,0)");
+          ctx.fillStyle = gradient;
+          ctx.beginPath();
+          ctx.arc(0, 0, 1, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
         });
-        const rippleOffset = Math.sin((x * 0.024) + t * 2.2 + star.phase) * 8 + rippleBend;
-        scene.push();
-        scene.translate(x + rippleOffset, reflectedY);
-        scene.scale(1, -0.42);
-        scene.rotate(-rotation * 0.4);
-        scene.fill(180, 210, 255, alpha);
-        scene.noStroke();
-        if (star.isLetter) {
-          scene.textFont("Georgia");
-          scene.textAlign(scene.CENTER, scene.CENTER);
-          scene.textSize(star.size * 2.3);
-          scene.text(star.char, 0, 0);
-        } else {
-          scene.ellipse(0, 0, star.size * 1.5, star.size * 0.8);
-        }
-        scene.pop();
       }
 
       function buildLetterLayout() {
-        const waterY = p.height * 0.62;
-        const envelope = { x: p.width * 0.5, y: p.height * 0.45 };
-        const measure = p.createGraphics(10, 10);
-        measure.textFont("Georgia");
-        const paperWidth = Math.min(430, p.width * 0.66) - 60;
-        let paperSize = Math.min(19, Math.max(12, p.width / 48));
-        let paperLeading = paperSize * 1.45;
-        measure.textSize(paperSize);
-        const fullText = [
-          plaintext.recipient ? `To ${plaintext.recipient}` : "",
-          plaintext.title || "Untitled letter",
-          "",
-          plaintext.message || "",
-        ].filter((line, index) => index < 3 || String(line).trim()).join("\n");
-        const paperLines = [];
-        fullText.split("\n").forEach((paragraph) => {
-          if (!paragraph.trim()) {
-            paperLines.push("");
+        const maxWidth = p.width * (p.width < 680 ? 0.9 : 0.72);
+        const availableHeight = p.height * 0.44;
+        const maxBase = Math.min(23, Math.max(12, p.width / 46));
+        const minBase = p.width < 680 ? 4.2 : 5.4;
+        let measured = null;
+
+        for (let base = maxBase; base >= minBase; base -= 0.55) {
+          measured = measureLines(base, maxWidth);
+          if (measured.height <= availableHeight || base <= minBase + 0.01) break;
+        }
+
+        const x = (p.width - maxWidth) / 2;
+        const y = Math.max(24, p.height * 0.07 + Math.max(0, availableHeight - measured.height) * 0.22);
+        const characters = [];
+        let cursorY = y;
+
+        measured.lines.forEach((line) => {
+          const lineHeight = line.blank ? measured.base * 0.82 : line.size * 1.34;
+          if (!line.blank) {
+            p.textSize(line.size);
+            let cursorX = x;
+            [...line.text].forEach((char) => {
+              const charWidth = Math.max(1, p.textWidth(char || " "));
+              characters.push({
+                char,
+                visible: /\S/.test(char),
+                x: cursorX + charWidth / 2,
+                y: cursorY + lineHeight * 0.52,
+                size: line.size,
+                section: line.section,
+              });
+              cursorX += charWidth;
+            });
+          }
+          cursorY += lineHeight;
+        });
+
+        return { characters };
+      }
+
+      function measureLines(base, maxWidth) {
+        const recipient = plaintext.recipient ? `To ${plaintext.recipient}` : "";
+        const title = plaintext.title || "Untitled letter";
+        const message = plaintext.message || "";
+        const sections = [
+          { section: "recipient", text: recipient, size: Math.max(4, base * 0.78) },
+          { section: "title", text: title, size: Math.max(5, base * 1.36) },
+          { section: "gap", text: "", size: base },
+          { section: "message", text: message, size: base },
+        ];
+        const lines = [];
+        let height = 0;
+
+        sections.forEach((section) => {
+          if (!section.text) {
+            lines.push({ text: "", blank: true, size: section.size, section: section.section });
+            height += base * 0.82;
             return;
           }
-          paperLines.push(...wrapWords(measure, paragraph.trim(), paperWidth));
+          p.textSize(section.size);
+          wrapTextToLines(section.text, maxWidth).forEach((lineText) => {
+            lines.push({ text: lineText, blank: false, size: section.size, section: section.section });
+            height += section.size * 1.34;
+          });
         });
 
-        const glyphSource = [...`${plaintext.title || ""} ${plaintext.message || ""}`].filter((char) => char.trim());
-        const cappedGlyphs = glyphSource.slice(0, p.width < 680 ? 180 : 340);
-        measure.remove();
-        return { waterY, envelope, paperLines, paperSize, paperLeading, glyphs: cappedGlyphs };
+        return { base, lines, height };
       }
 
-      function buildRoseParticles() {
-        const count = p.width < 680 ? 360 : 760;
-        const list = [];
-        for (let i = 0; i < count; i += 1) {
-          const angle = p.random(-p.PI * 0.96, -p.PI * 0.04);
-          const power = p.random(70, p.width * 0.45);
-          list.push({
-            index: i,
-            vx: Math.cos(angle) * power,
-            vy: Math.sin(angle) * power * p.random(0.65, 1.22),
-            gravity: p.random(40, 180),
-            sinkX: p.random(p.width * 0.08, p.width * 0.92),
-            sinkDepth: p.random(-30, p.height * 0.28),
-            size: p.random(2.2, 6.8),
-            alpha: p.random(28, 92),
-            rotation: p.random(p.TWO_PI),
-            spin: p.random(-1.2, 1.2),
-            wobble: p.random(1.2, 3.4),
-            phase: p.random(p.TWO_PI),
-            color: roseColors[i % roseColors.length],
-          });
-        }
-        return list;
-      }
-
-      function buildGlyphStars() {
-        const glyphs = layout.glyphs.length ? layout.glyphs : ["*"];
-        const count = Math.max(glyphs.length, p.width < 680 ? 130 : 230);
-        const list = [];
-        for (let i = 0; i < count; i += 1) {
-          const isLetter = i < glyphs.length && i % 2 !== 0;
-          list.push({
-            char: isLetter ? glyphs[i % glyphs.length] : "*",
-            isLetter,
-            skyX: p.random(p.width * 0.12, p.width * 0.88),
-            skyY: p.random(-120, p.height * 0.22),
-            waterX: p.random(p.width * 0.12, p.width * 0.88),
-            waterY: layout.waterY + p.random(-18, 24),
-            size: isLetter ? p.random(7, 12) : p.random(2.0, 4.4),
-            start: 2.8 + i * (p.width < 680 ? 0.028 : 0.018) + p.random(0, 1.2),
-            duration: p.random(3.2, 5.6),
-            phase: p.random(p.TWO_PI),
-            sway: p.random(12, 42),
-            swaySpeed: p.random(0.38, 0.82),
-            spin: p.random(-0.28, 0.28),
-            rotation: p.random(-0.8, 0.8),
-            impacted: false,
-          });
-        }
-        return list;
-      }
-
-      function buildDust() {
-        const list = [];
-        for (let i = 0; i < 90; i += 1) {
-          list.push({
-            x: p.random(p.width),
-            y: p.random(p.height * 0.05, p.height * 0.55),
-            size: p.random(0.8, 2.4),
-            alpha: p.random(12, 45),
-            phase: p.random(p.TWO_PI),
-            speed: p.random(0.35, 1.1),
-          });
-        }
-        return list;
-      }
-
-      function wrapWords(g, paragraph, maxWidth) {
-        const hasSpaces = /\s/.test(paragraph);
-        const tokens = hasSpaces ? paragraph.split(/\s+/) : [...paragraph];
+      function wrapTextToLines(text, maxWidth) {
         const lines = [];
-        let line = "";
-        tokens.forEach((token) => {
-          const next = hasSpaces ? `${line}${line ? " " : ""}${token}` : `${line}${token}`;
-          if (g.textWidth(next) <= maxWidth || !line) {
-            line = next;
-          } else {
-            lines.push(line);
-            line = token;
+        String(text || "").split("\n").forEach((paragraph) => {
+          if (!paragraph) {
+            lines.push("");
+            return;
           }
+
+          let line = "";
+          let lastSpace = -1;
+          [...paragraph].forEach((char) => {
+            line += char;
+            if (/\s/.test(char)) lastSpace = line.length - 1;
+            if (p.textWidth(line) > maxWidth && line.length > 1) {
+              if (lastSpace > 0) {
+                lines.push(line.slice(0, lastSpace));
+                line = line.slice(lastSpace + 1);
+              } else {
+                lines.push(line.slice(0, -1));
+                line = char;
+              }
+              lastSpace = line.search(/\s(?!.*\s)/);
+            }
+          });
+          lines.push(line);
         });
-        if (line) lines.push(line);
         return lines;
       }
 
-      function drawRoseParticle(x, y, size, color, alpha, rotation) {
-        scene.push();
-        scene.translate(x, y);
-        scene.rotate(rotation);
-        drawGlow(0, 0, size * 5.2, color, alpha * 0.18);
-        scene.noStroke();
-        scene.fill(color[0], color[1], color[2], alpha);
-        for (let i = 0; i < 5; i += 1) {
-          scene.push();
-          scene.rotate((i / 5) * p.TWO_PI);
-          scene.ellipse(size * 0.25, 0, size * 0.9, size * 0.45);
-          scene.pop();
-        }
-        scene.fill(255, 230, 224, alpha * 0.72);
-        scene.circle(0, 0, size * 0.45);
-        scene.pop();
+      function buildCharacterParticles(characters) {
+        return characters.map((character, index) => new CharacterParticle(character, index, characters.length));
       }
 
-      function drawGlow(x, y, radius, color, alpha) {
-        scene.noStroke();
-        for (let i = 4; i >= 1; i -= 1) {
-          const a = alpha * (0.07 + i * 0.035);
-          scene.fill(color[0], color[1], color[2], a);
-          scene.circle(x, y, radius * i * 0.5);
+      class CharacterParticle {
+        constructor(character, index, total) {
+          this.char = character.char;
+          this.visible = character.visible;
+          this.startX = character.x;
+          this.startY = character.y;
+          this.x = character.x;
+          this.y = character.y;
+          this.size = character.size;
+          this.index = index;
+          this.total = Math.max(1, total);
+          this.targetU = p.constrain(character.x / p.width + p.random(-0.07, 0.07), 0.035, 0.965);
+          this.startTime = 0.32 + (index / this.total) * Math.min(3.2, 0.9 + this.total * 0.0022) + p.random(0, 0.22);
+          this.duration = p.random(1.8, 3.2) + p.constrain(character.y / p.height, 0, 1) * 0.35;
+          this.tailLength = Math.floor(p.random(4, 7));
+          this.tail = [];
+          this.phase = p.random(p.TWO_PI);
+          this.side = character.x < p.width * 0.5 ? 1 : -1;
+          this.arc = p.random(18, 58) * this.side;
+          this.spinDirection = p.random() > 0.5 ? 1 : -1;
+          this.scale = 1;
+          this.rotation = 0;
+          this.dissolved = false;
+        }
+
+        update(t) {
+          if (this.dissolved) return;
+          if (t < this.startTime) {
+            this.x = this.startX;
+            this.y = this.startY;
+            this.scale = 1;
+            this.rotation = 0;
+            return;
+          }
+
+          const local = p.constrain((t - this.startTime) / this.duration, 0, 1);
+          const eased = easeInCubic(local);
+          const target = riverPoint(this.targetU + Math.sin(this.phase + t * 0.22) * 0.012, t);
+          const cometArc = Math.sin(local * p.PI) * this.arc * (1 - local * 0.18);
+          this.x = p.lerp(this.startX, target.x, eased) + cometArc;
+          this.y = p.lerp(this.startY, target.y, eased) + Math.sin(local * p.PI) * p.height * 0.08;
+          this.rotation = this.spinDirection * p.TWO_PI * 2 * eased;
+          this.scale = p.lerp(1, 0.08, eased);
+
+          this.tail.unshift({
+            x: this.x,
+            y: this.y,
+            age: 0,
+            radius: p.random(1, 2),
+          });
+          this.tail.forEach((point) => {
+            point.age += 1;
+          });
+          this.tail = this.tail.slice(0, this.tailLength);
+
+          if (local >= 1) {
+            this.dissolved = true;
+            spawnMicroCascade(target.x, target.y, this.targetU, t);
+          }
+        }
+
+        draw(t) {
+          if (this.dissolved) return;
+          const active = t >= this.startTime;
+
+          p.push();
+          p.blendMode(p.ADD);
+          this.tail.forEach((point, tailIndex) => {
+            const fade = 1 - tailIndex / Math.max(1, this.tailLength);
+            p.noStroke();
+            p.fill(255, 248, 232, 128 * fade);
+            p.circle(point.x, point.y, point.radius * (1 + fade));
+            p.fill(244, 200, 69, 68 * fade);
+            p.circle(point.x, point.y, point.radius * 2.2);
+          });
+
+          if (this.visible) {
+            const glow = active ? 210 : 80;
+            const ctx = p.drawingContext;
+            ctx.save();
+            ctx.shadowBlur = active ? 18 : 7;
+            ctx.shadowColor = `rgba(244, 200, 69, ${active ? 0.58 : 0.28})`;
+            p.translate(this.x, this.y);
+            p.rotate(this.rotation);
+            p.scale(this.scale);
+            p.textFont("Georgia");
+            p.textAlign(p.CENTER, p.CENTER);
+            p.textSize(this.size);
+            p.noStroke();
+            p.fill(255, 248, 232, active ? glow : 225);
+            p.text(this.char, 0, 0);
+            if (this.scale <= 0.16) {
+              p.fill(255, 255, 255, 230);
+              p.circle(0, 0, 3);
+            }
+            ctx.restore();
+          }
+          p.pop();
         }
       }
 
-      function drawTinyStar(x, y, innerRadius, outerRadius, points) {
-        scene.beginShape();
-        for (let i = 0; i < points * 2; i += 1) {
-          const angle = -p.HALF_PI + (i * p.PI) / points;
-          const radius = i % 2 === 0 ? outerRadius : innerRadius;
-          scene.vertex(x + Math.cos(angle) * radius, y + Math.sin(angle) * radius);
-        }
-        scene.endShape(scene.CLOSE);
+      function updateCharacterParticles(t) {
+        characterParticles.forEach((particle) => {
+          particle.update(t);
+          particle.draw(t);
+        });
       }
 
-      function emotionalShake(t) {
-        const amount = 5.5 * (1 - p.constrain(Math.abs(t - 0.95) / 0.52, 0, 1));
+      function spawnMicroCascade(x, y, u, t) {
+        const count = Math.floor(p.random(8, 15));
+        for (let i = 0; i < count; i += 1) {
+          microParticles.push(new MicroParticle(x, y, u, t, i));
+        }
+        for (let i = 0; i < 3; i += 1) {
+          sparkles.push(createSparkle(x + p.random(-7, 7), y + p.random(-7, 7), p.random(4, 6), t));
+        }
+        if (t - lastChimeAt > 0.05 && chimeCount < 72) {
+          lastChimeAt = t;
+          chimeCount += 1;
+          playWaterChime(0.55, p.map(x, 0, p.width, -0.72, 0.72));
+        }
+      }
+
+      class MicroParticle {
+        constructor(x, y, u, born, index) {
+          this.originX = x;
+          this.originY = y;
+          this.x = x;
+          this.y = y;
+          this.u = p.constrain(u + p.random(-0.012, 0.012), 0, 1);
+          this.born = born;
+          this.lifetime = p.random(2.4, 4);
+          this.speed = p.random(0.055, 0.12);
+          this.drift = p.random(-12, 12);
+          this.phase = p.random(p.TWO_PI);
+          this.float = p.random(12, 30);
+          this.color = MICRO_COLORS[index % MICRO_COLORS.length];
+        }
+
+        update(t) {
+          const age = t - this.born;
+          const progress = p.constrain(age / this.lifetime, 0, 1);
+          const u = p.constrain(this.u + age * this.speed, 0, 1);
+          const normal = riverNormal(u, t);
+          const base = riverPoint(u, t);
+          const noiseDrift = (p.noise(this.phase, age * 0.35) - 0.5) * 24;
+          const drift = this.drift + Math.sin(age * 2.2 + this.phase) * 4 + noiseDrift;
+          const lock = easeOutCubic(p.constrain(age * 0.9, 0, 1));
+          const endFloat = easeInCubic(p.constrain((progress - 0.65) / 0.35, 0, 1)) * this.float;
+          this.x = p.lerp(this.originX, base.x + normal.x * drift, lock);
+          this.y = p.lerp(this.originY, base.y + normal.y * drift, lock) - endFloat;
+          this.dead = progress >= 1;
+        }
+
+        draw(t) {
+          const age = t - this.born;
+          const progress = p.constrain(age / this.lifetime, 0, 1);
+          const pulse = Math.pow(Math.max(0, Math.sin(progress * p.PI)), 0.7)
+            * (0.72 + Math.sin(age * p.TWO_PI * 1.35 + this.phase) * 0.28);
+          const radius = 2 * (1 - progress);
+          if (radius <= 0.02 || pulse <= 0.01) return;
+          p.noStroke();
+          p.fill(this.color.rgb[0], this.color.rgb[1], this.color.rgb[2], 235 * this.color.alpha * pulse);
+          p.circle(this.x, this.y, radius * 2);
+        }
+      }
+
+      function updateMicroParticles(t) {
+        p.push();
+        p.blendMode(p.ADD);
+        microParticles = microParticles.filter((particle) => !particle.dead);
+        microParticles.forEach((particle) => {
+          particle.update(t);
+          particle.draw(t);
+        });
+        p.pop();
+      }
+
+      function buildAmbientStream() {
+        const count = p.width < 680 ? 90 : 150;
+        const stream = [];
+        for (let i = 0; i < count; i += 1) {
+          stream.push({
+            u: p.random(),
+            speed: p.random(0.012, 0.035),
+            drift: p.random(-18, 18),
+            radius: p.random(0.55, 1.35),
+            alpha: p.random(38, 118),
+            phase: p.random(p.TWO_PI),
+            color: MICRO_COLORS[i % MICRO_COLORS.length],
+          });
+        }
+        return stream;
+      }
+
+      function drawRiverGlow(t) {
+        p.push();
+        p.blendMode(p.ADD);
+        p.noFill();
+        for (let band = -2; band <= 2; band += 1) {
+          p.stroke(185, 200, 197, 10 - Math.abs(band) * 2);
+          p.strokeWeight(10 - Math.abs(band) * 2);
+          p.beginShape();
+          for (let i = 0; i <= 90; i += 1) {
+            const u = i / 90;
+            const point = riverOffsetPoint(u, band * 9, t);
+            p.curveVertex(point.x, point.y);
+          }
+          p.endShape();
+        }
+        p.pop();
+      }
+
+      function drawAmbientRiver(t) {
+        p.push();
+        p.blendMode(p.ADD);
+        ambientStream.forEach((particle) => {
+          const u = (particle.u + t * particle.speed) % 1;
+          const drift = particle.drift + Math.sin(t * 1.2 + particle.phase) * 5;
+          const point = riverOffsetPoint(u, drift, t);
+          const pulse = 0.55 + Math.sin(t * 2.1 + particle.phase) * 0.45;
+          const color = particle.color;
+          p.noStroke();
+          p.fill(color.rgb[0], color.rgb[1], color.rgb[2], particle.alpha * color.alpha * pulse);
+          p.circle(point.x, point.y, particle.radius * 2);
+        });
+        p.pop();
+      }
+
+      function updateSparkles(t) {
+        sparkles = sparkles.filter((sparkle) => t - sparkle.born <= sparkle.duration);
+        while (sparkles.length < sparkleTarget) {
+          sparkles.push(createSparkle(null, null, null, t));
+        }
+
+        p.push();
+        p.blendMode(p.ADD);
+        sparkles.forEach((sparkle) => drawSparkle(sparkle, t));
+        p.pop();
+      }
+
+      function createSparkle(x, y, radius, born) {
+        const t = typeof born === "number" ? born : elapsed();
+        let sparkleX = x;
+        let sparkleY = y;
+        if (sparkleX === null || sparkleY === null) {
+          const point = riverOffsetPoint(p.random(), p.random(-38, 38), t);
+          sparkleX = point.x;
+          sparkleY = point.y;
+        }
         return {
-          x: Math.sin(t * 73) * amount,
-          y: Math.cos(t * 57) * amount * 0.65,
+          x: sparkleX,
+          y: sparkleY,
+          born: t,
+          duration: p.random(0.6, 1.1),
+          radius: radius || p.random(2, 5),
+          color: p.random() > 0.28 ? [255, 255, 255] : [244, 200, 69],
+          driftX: p.random(-10, 10),
+          driftY: p.random(-8, 8),
+          rotation: p.random(p.TWO_PI),
+        };
+      }
+
+      function drawSparkle(sparkle, t) {
+        const progress = p.constrain((t - sparkle.born) / sparkle.duration, 0, 1);
+        const alpha = Math.sin(progress * p.PI);
+        if (alpha <= 0.01) return;
+        const x = sparkle.x + sparkle.driftX * progress;
+        const y = sparkle.y + sparkle.driftY * progress;
+        const radius = sparkle.radius * (0.78 + Math.sin(progress * p.PI) * 0.35);
+
+        p.push();
+        p.translate(x, y);
+        p.rotate(sparkle.rotation + progress * 0.8);
+        p.stroke(sparkle.color[0], sparkle.color[1], sparkle.color[2], 245 * alpha);
+        p.strokeWeight(1.05);
+        p.line(-radius, 0, radius, 0);
+        p.line(0, -radius, 0, radius);
+        p.rotate(p.QUARTER_PI);
+        p.stroke(sparkle.color[0], sparkle.color[1], sparkle.color[2], 120 * alpha);
+        p.line(-radius * 0.48, 0, radius * 0.48, 0);
+        p.line(0, -radius * 0.48, 0, radius * 0.48);
+        p.pop();
+      }
+
+      function drawBoat(t) {
+        const u = (t * 0.045) % 1;
+        const base = riverPoint(u, t);
+        const bob = Math.sin(t * p.TWO_PI * 0.6) * 3;
+        const x = base.x;
+        const y = base.y + 24 + bob;
+        const w = 28;
+        const h = 14;
+
+        p.push();
+        p.translate(x, y);
+        p.stroke(255, 255, 255, 210);
+        p.strokeWeight(1.25);
+        p.noFill();
+        p.line(-w / 2, 0, -w * 0.18, h * 0.42);
+        p.line(-w * 0.18, h * 0.42, w * 0.16, h * 0.42);
+        p.line(w * 0.16, h * 0.42, w / 2, 0);
+        p.line(-w / 2, 0, 0, -h * 0.55);
+        p.line(0, -h * 0.55, w / 2, 0);
+        p.line(-w * 0.18, h * 0.42, 0, 0);
+        p.line(0, 0, w * 0.16, h * 0.42);
+        p.pop();
+      }
+
+      function riverPoint(u, t = 0) {
+        const clamped = p.constrain(u, 0, 1);
+        const x = p.lerp(p.width * 0.07, p.width * 0.93, clamped);
+        const sigmoid = 1 / (1 + Math.exp(-8 * (clamped - 0.5)));
+        const y = p.height * (0.54 + 0.22 * sigmoid)
+          + Math.sin(clamped * p.TWO_PI * 1.35 + t * 0.16) * p.height * 0.035;
+        return { x, y };
+      }
+
+      function riverNormal(u, t = 0) {
+        const before = riverPoint(Math.max(0, u - 0.006), t);
+        const after = riverPoint(Math.min(1, u + 0.006), t);
+        const dx = after.x - before.x;
+        const dy = after.y - before.y;
+        const length = Math.hypot(dx, dy) || 1;
+        return { x: -dy / length, y: dx / length };
+      }
+
+      function riverOffsetPoint(u, offset, t = 0) {
+        const base = riverPoint(u, t);
+        const normal = riverNormal(u, t);
+        return {
+          x: base.x + normal.x * offset,
+          y: base.y + normal.y * offset,
         };
       }
 
@@ -2167,10 +1691,6 @@
 
       function easeInCubic(t) {
         return t * t * t;
-      }
-
-      function easeInOutCubic(t) {
-        return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
       }
     }, el.riverCanvas);
   }
